@@ -1,0 +1,27 @@
+{
+  "features": [
+    "is_burst",
+    "burst_ratio",
+    "is_event",
+    "hour_of_day",
+    "day_of_week",
+    "hour_sin",
+    "hour_cos",
+    "rolling_mean_1h",
+    "rolling_std_1h",
+    "rolling_mean_5m",
+    "rolling_std_5m",
+    "lag_requests_1h",
+    "lag_requests_1d"
+  ],
+  "n_features": 13,
+  "model_type": "xgboost",
+  "timeframe": "5m",
+  "scaler_type": "StandardScaler",
+  "metrics": {
+    "test_mae": 2.4024102752823135,
+    "test_rmse": 3.825362970180661,
+    "test_r2": 0.9990132802813471,
+    "test_smape": 1.7729591485179643
+  }
+}
