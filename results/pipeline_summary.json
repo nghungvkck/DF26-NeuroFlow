@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-01-30T17:29:31.108656",
+  "phase_a": {
+    "name": "Model Evaluation (Real Data)",
+    "description": "Forecast model performance on historical data",
+    "output_file": "model_evaluation.json",
+    "status": "skipped"
+  },
+  "phase_b": {
+    "name": "Autoscaling Tests (Synthetic Data)",
+    "description": "Autoscaling strategy performance on synthetic scenarios",
+    "output_file": "simulation_results.csv",
+    "status": "skipped"
+  }
+}

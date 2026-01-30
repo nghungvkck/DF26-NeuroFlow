@@ -1,0 +1,44 @@
+{
+  "timeframe": "1m",
+  "features": [
+    "is_burst",
+    "burst_ratio",
+    "is_event",
+    "hour_of_day",
+    "day_of_week",
+    "hour_sin",
+    "hour_cos",
+    "lag_requests_1h",
+    "lag_requests_1d",
+    "rolling_mean_1h",
+    "rolling_std_1h",
+    "rolling_mean_5m",
+    "rolling_std_5m"
+  ],
+  "hyperparameters": {
+    "n_estimators": 200,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "random_state": 42,
+    "verbosity": 0
+  },
+  "train_size": 60528,
+  "validation_size": 15132,
+  "test_size": 13620,
+  "metrics": {
+    "validation": {
+      "mae": 9.770109137475265,
+      "rmse": 12.768128115293518,
+      "r2": 0.6597691060090852,
+      "smape": 34.89526275628933
+    },
+    "test": {
+      "mae": 10.600453211629706,
+      "rmse": 14.040692273078253,
+      "r2": 0.7276443746939859,
+      "smape": 31.556679423530305
+    }
+  }
+}
