@@ -22,7 +22,6 @@ from forecast_tab_simple import render_forecast_tab
 
 st.set_page_config(page_title="DataFlow Autoscaling Demo", layout="wide", initial_sidebar_state="collapsed")
 
-# Custom CSS for dark theme
 st.markdown("""
 <style>
     .stApp {
@@ -69,21 +68,14 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 
 
 def _calculate_hysteresis_action(predictions: np.ndarray, upper_threshold: float, lower_threshold: float, window: int = 3) -> tuple[str, str]:
-    """
-    Calculate scaling action with hysteresis to avoid flapping.
-    Only recommend scale if threshold is breached consistently.
-    """
+    # Calculate hysteresis action
     if len(predictions) < window:
         window = len(predictions)
     
     recent_predictions = predictions[:window]
-    
-    # Count how many predictions exceed thresholds
     exceed_upper = np.sum(recent_predictions > upper_threshold)
     exceed_lower = np.sum(recent_predictions < lower_threshold)
-    
-    # Require majority of window to exceed threshold
-    threshold_count = int(np.ceil(window * 0.6))  # 60% of window
+    threshold_count = int(np.ceil(window * 0.6))
     
     if exceed_upper >= threshold_count:
         reason = f"🔺 {exceed_upper}/{window} predictions exceed upper threshold ({upper_threshold:.0f})"

@@ -11,7 +11,7 @@ def decide_scaling(
     lower_threshold: float,
     cooldown_steps: int = 3,
 ) -> tuple[str, str]:
-    global _cooldown_remaining
+    # Decide scaling action
 
     if cooldown_steps < 0:
         raise ValueError("cooldown_steps must be >= 0")

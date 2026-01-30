@@ -1,6 +1,3 @@
-"""
-Forecast tab: Load test data (future) and show Actual vs Predicted
-"""
 import os
 import pandas as pd
 import numpy as np
@@ -9,9 +6,7 @@ import streamlit as st
 
 
 def render_forecast_tab(df, forecast_next, model_dir, project_root):
-    """
-    Forecast visualization: Load test data (future) and show Actual vs Predicted
-    """
+    # Forecast visualization - Load test data and show Actual vs Predicted
     st.subheader("📈 Forecast: Actual vs Predicted (Test Set = Future)")
     
     # Controls
@@ -25,7 +20,7 @@ def render_forecast_tab(df, forecast_next, model_dir, project_root):
     
     # Load test data and predictions
     try:
-        # Load test data (giả định là tương lai)
+        # Load test data
         data_dir = os.path.join(model_dir, "..", "data")
         test_file = f"test_{timeframe}_autoscaling.csv"
         test_path = os.path.join(data_dir, test_file)

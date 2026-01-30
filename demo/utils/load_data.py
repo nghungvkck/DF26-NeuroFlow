@@ -6,6 +6,7 @@ import pandas as pd
 
 
 def load_traffic_data(file_name: str, data_dir: str | None = None) -> pd.DataFrame:
+    # Load traffic data from CSV
     if data_dir is None:
         data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
 

@@ -43,6 +43,7 @@ def _build_future_timestamps(last_ts: pd.Timestamp, step: pd.Timedelta, horizon:
 
 
 def discover_models(model_dir: str | None = None) -> dict[str, list[str]]:
+    # Discover available LSTM and XGBoost models
     if model_dir is None:
         model_dir = DEFAULT_MODEL_DIR
     
@@ -71,6 +72,7 @@ def extract_timeframe(filename: str) -> str:
 
 
 def load_lstm_model(model_path: str) -> Any:
+    # Load Keras LSTM model
     try:
         from tensorflow.keras.models import load_model
         return load_model(model_path)
@@ -80,6 +82,7 @@ def load_lstm_model(model_path: str) -> Any:
 
 
 def load_xgboost_model(model_path: str) -> Any:
+    # Load XGBoost model
     try:
         import xgboost as xgb
         model = xgb.Booster()
@@ -165,6 +168,7 @@ def _resolve_hybrid_model_path(timeframe: str, model_dir: str | None = None) -> 
 
 
 def _predict_lstm(model: Any, df: pd.DataFrame, horizon: int) -> list[float] | None:
+    # Predict with LSTM model
     try:
         lookback = min(12, len(df))
         last_sequence = df["requests_count"].iloc[-lookback:].values.astype(np.float32)
@@ -190,11 +194,7 @@ def _predict_xgboost_rolling(
     scaler: Any | None = None,
     feature_list: list[str] | None = None,
 ) -> list[float] | None:
-    """
-    Rolling forecast for XGBoost - predicts one step at a time and updates features.
-    Note: Scaler is applied to INPUT FEATURES, not to predictions.
-    XGBoost models are trained with scaled features but unscaled target.
-    """
+    # XGBoost rolling forecast - predict one step at a time
     try:
         import xgboost as xgb
         
@@ -234,24 +234,23 @@ def _predict_xgboost_rolling(
 
             last_row_array = np.array(last_row).reshape(1, -1)
             
-            # Apply scaler to INPUT FEATURES (not predictions)
+            # Apply scaler to features
             if scaler is not None and hasattr(scaler, "transform"):
                 last_row_array = scaler.transform(last_row_array)
             
-            # Create DMatrix with feature names
+            # Create DMatrix
             dmatrix = xgb.DMatrix(last_row_array, feature_names=feature_cols)
             
-            # Predict next value (prediction is already in original scale)
+            # Predict next value
             pred = model.predict(dmatrix)[0]
             pred_value = max(0, float(pred))
             predictions.append(pred_value)
             
-            # Update dataframe with predicted value for next iteration
-            # This is a simplified update - in production, recalculate all features
+            # Update dataframe for next iteration
             new_row = df_extended.iloc[-1].copy()
             new_row["requests_count"] = pred_value
             
-            # Update rolling features (simplified)
+            # Update rolling features
             if "rolling_mean_5m" in df_extended.columns:
                 recent_5m = df_extended["requests_count"].tail(5).tolist() + [pred_value]
                 new_row["rolling_mean_5m"] = np.mean(recent_5m[-5:])
@@ -262,7 +261,7 @@ def _predict_xgboost_rolling(
                 new_row["rolling_mean_1h"] = np.mean(recent_1h[-12:])
                 new_row["rolling_std_1h"] = np.std(recent_1h[-12:])
             
-            # Append new row (as pd.Series to avoid deprecation warning)
+            # Append new row
             df_extended = pd.concat([df_extended, pd.DataFrame([new_row])], ignore_index=True)
         
         return predictions
@@ -279,6 +278,7 @@ def _predict_xgboost_from_csv(
     timeframe: str,
     model_dir: str | None = None,
 ) -> list[float] | None:
+    # Load XGBoost predictions from CSV
     if model_dir is None:
         model_dir = DEFAULT_MODEL_DIR
 
@@ -330,6 +330,7 @@ def _predict_hybrid(
     scaler: Any | None,
     window_size: int | None,
 ) -> list[float] | None:
+    # Predict with hybrid Prophet + LSTM model
     try:
         if scaler is None:
             return _predict_lstm(model, df, horizon)
@@ -355,6 +356,7 @@ def _predict_hybrid(
 
 
 def _heuristic_forecast(df: pd.DataFrame, horizon: int) -> list[float]:
+    # Simple baseline forecast using rolling mean and trend
     baseline = float(df["rolling_mean_1h"].iloc[-1]) if "rolling_mean_1h" in df.columns else float(df["requests_count"].iloc[-1])
     
     recent = df["requests_count"].tail(24).values
@@ -379,10 +381,7 @@ def forecast_on_data(
     timeframe: str = "5m",
     model_dir: str | None = None,
 ) -> tuple[pd.DataFrame, str]:
-    """
-    Generate rolling forecast on historical data (backtesting/visualization).
-    Predicts one step ahead for each data point.
-    """
+    # Generate rolling forecast on historical data for backtesting
     if step <= 0:
         raise ValueError("step must be a positive integer")
     
@@ -477,6 +476,7 @@ def forecast_next(
     timeframe: str = "5m",
     model_dir: str | None = None,
 ) -> tuple[pd.DataFrame, str]:
+    # Forecast next horizon steps into future
     if forecast_horizon <= 0:
         raise ValueError("forecast_horizon must be a positive integer")
 

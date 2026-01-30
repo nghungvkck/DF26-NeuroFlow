@@ -1,6 +1,3 @@
-"""
-Enhanced Forecast Tab with Plotly visualization, hysteresis logic, and autoscaling recommendations
-"""
 import os
 import numpy as np
 import pandas as pd
@@ -9,10 +6,7 @@ import streamlit as st
 
 
 def calculate_hysteresis_action(predictions: np.ndarray, upper_threshold: float, lower_threshold: float, window: int = 3) -> tuple[str, str]:
-    """
-    Calculate scaling action with hysteresis to avoid flapping.
-    Only recommend scale if threshold is breached consistently.
-    """
+    # Calculate hysteresis action
     if len(predictions) < window:
         window = len(predictions)
     
@@ -37,9 +31,7 @@ def calculate_hysteresis_action(predictions: np.ndarray, upper_threshold: float,
 
 
 def render_forecast_tab_plotly(df, forecast_next, model_dir, project_root):
-    """
-    Render the enhanced forecast tab with Plotly visualization
-    """
+    # Render forecast tab with Plotly visualization
     st.subheader("📈 Time-Series Forecast & Autoscaling")
     
     # Mode selector
@@ -47,7 +39,7 @@ def render_forecast_tab_plotly(df, forecast_next, model_dir, project_root):
     
     st.divider()
     
-    # Controls in two rows
+    # Controls
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         timeframe = st.selectbox("Timeframe", ["1m", "5m", "15m"], key="timeframe", help="Data resolution")
