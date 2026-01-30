@@ -1,0 +1,209 @@
+{
+  "step_seconds": 5,
+  "history": [
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0021,
+        "ram": 30.79
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.002,
+        "ram": 30.8
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0024,
+        "ram": 30.79
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0026,
+        "ram": 30.79
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.002,
+        "ram": 30.8
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.002,
+        "ram": 30.79
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0022,
+        "ram": 30.79
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0024,
+        "ram": 30.8
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0026,
+        "ram": 30.79
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0022,
+        "ram": 30.8
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0023,
+        "ram": 30.8
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0024,
+        "ram": 30.79
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.5025,
+        "ram": 36.72
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.5085000000000001,
+        "ram": 36.54
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.4874,
+        "ram": 35.86
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0021,
+        "ram": 36.68
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0019,
+        "ram": 35.8
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0021,
+        "ram": 35.52
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0021,
+        "ram": 36.66
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0023,
+        "ram": 35.77
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0022,
+        "ram": 35.49
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0024,
+        "ram": 36.66
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0016,
+        "ram": 35.77
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0016,
+        "ram": 35.49
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0026,
+        "ram": 36.66
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0026,
+        "ram": 35.77
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0026,
+        "ram": 35.49
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0023,
+        "ram": 36.66
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0021,
+        "ram": 35.77
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0025,
+        "ram": 35.49
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0022,
+        "ram": 36.66
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0022,
+        "ram": 35.77
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0022,
+        "ram": 35.49
+      }
+    ],
+    [
+      {
+        "server_name": "server-cluster-app-4",
+        "cpu": 0.0023,
+        "ram": 36.66
+      },
+      {
+        "server_name": "server-cluster-app-6",
+        "cpu": 0.0022,
+        "ram": 35.77
+      },
+      {
+        "server_name": "server-cluster-app-5",
+        "cpu": 0.0022,
+        "ram": 35.49
+      }
+    ]
+  ]
+}

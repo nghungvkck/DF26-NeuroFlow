@@ -1,17 +1,30 @@
-from metrics.server_tracker import collect_server_history
-from cost.cost import compute_cost
-from cost.cost_config import COST_PER_SERVER_PER_HOUR
+import json
 
-DURATION = 60        # 1 phút test
-STEP_SECONDS = 5     # lấy mẫu mỗi 5 giây
-
-server_history = collect_server_history(DURATION, STEP_SECONDS)
-
-total_cost = compute_cost(
+def compute_cost(
     server_history,
-    COST_PER_SERVER_PER_HOUR,
-    step_minutes=STEP_SECONDS / 60
-)
+    step_seconds,
+    cpu_price_per_hour=0.05,
+    ram_price_per_gb_hour=0.01
+):
+    total = 0.0
+    step_hours = step_seconds / 3600
 
-print("Server history:", server_history)
-print("Total cost: $", round(total_cost, 5))
+    for step in server_history:          # mỗi step
+        for s in step:                   # mỗi server trong step
+            cpu_cost = s["cpu"] * cpu_price_per_hour
+            ram_cost = (s["ram"] / 1024) * ram_price_per_gb_hour
+            total += (cpu_cost + ram_cost) * step_hours
+
+    return total
+
+
+if __name__ == "__main__":
+    with open("/home/nghung/Learn/DeepLearning/server-cluster/metrics/server_history.json") as f:
+        data = json.load(f)
+
+    history = data["history"]
+    step_seconds = data["step_seconds"]
+
+    total = compute_cost(history, step_seconds)
+
+    print(f"Total cost: ${total:.6f}")

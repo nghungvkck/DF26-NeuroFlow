@@ -6,7 +6,7 @@
 
 -(tạo thêm số bản sao nữa) : tạo thêm số bản sao, sao cho tổng 
 tạo thêm và hiện tại = 5
-docker-compose up --scale app=5 -d
+docker compose up --scale app=5 -d
 
 - Run autoscaler:
 cd autoscaler
