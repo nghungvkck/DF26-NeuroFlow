@@ -47,6 +47,7 @@ Demo/
 ## Data Format
 
 CSV files require:
+
 - `timestamp`: ISO 8601 datetime
 - `requests_count`: Number of requests (numeric)
 - Optional: `is_burst`, `is_event`, seasonal features
