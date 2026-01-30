@@ -19,6 +19,8 @@ bash test.sh
 [//]: # (ở đây em tạm thời tính tổng số tiền bằng thời gian xử dụng cpu và ram)
 
 [//]: # (thu tu chay nhu tren a)
+[//]: # (ở đây em có xử dụng nginx, để điều phối request đến các server, 
+khi server này bận, nginx sẽ tự động điều chỉnh đến server đang dảnh để xử lý)
 
 
 
