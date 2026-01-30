@@ -1,6 +1,20 @@
 import subprocess
 import time
 import json
+import os
+
+FLAG_FILE = "/home/nghung/Learn/DeepLearning/server-cluster/metrics/load.flag"
+
+def wait_for_load_start():
+    print("⏳ Waiting for load test to start...")
+    while True:
+        if os.path.exists(FLAG_FILE):
+            with open(FLAG_FILE) as f:
+                if f.read().strip() == "START":
+                    print("🚀 Load test detected. Start tracking.")
+                    return
+        time.sleep(1)
+
 
 def get_server_stats(service_keyword="server-cluster-app"):
     cmd = [
@@ -16,7 +30,6 @@ def get_server_stats(service_keyword="server-cluster-app"):
     for line in output:
         name, cpu, mem = line.split(maxsplit=2)
 
-        # ✅ chỉ lấy app server, bỏ nginx
         if service_keyword not in name:
             continue
 
@@ -39,11 +52,16 @@ def get_server_stats(service_keyword="server-cluster-app"):
     return servers
 
 
-def collect_server_history(duration=60, step_seconds=5):
+def collect_server_history(step_seconds=5):
     history = []
-    steps = duration // step_seconds
 
-    for _ in range(steps):
+    while True:
+        if os.path.exists(FLAG_FILE):
+            with open(FLAG_FILE) as f:
+                if f.read().strip() == "END":
+                    print("⏹️ Load test ended. Stop tracking.")
+                    break
+
         snapshot = get_server_stats()
         history.append(snapshot)
         time.sleep(step_seconds)
@@ -55,9 +73,11 @@ def collect_server_history(duration=60, step_seconds=5):
 
 
 if __name__ == "__main__":
-    data = collect_server_history()
+    wait_for_load_start()
 
-    with open("metrics/server_history.json", "w") as f:
+    data = collect_server_history(step_seconds=5)
+
+    with open("/home/nghung/Learn/DeepLearning/server-cluster/metrics/server_history.json", "w") as f:
         json.dump(data, f, indent=2)
 
-    print("✅ Saved server_history.json (CPU + RAM per app server)")
+    print("✅ Saved server_history.json (synced with load test)")
