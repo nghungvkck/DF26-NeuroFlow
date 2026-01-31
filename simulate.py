@@ -30,7 +30,9 @@ from autoscaling.hybrid import HybridAutoscaler
 from autoscaling.scenarios import generate_all_scenarios, Scenario
 from autoscaling.objective import compute_total_objective
 from cost.metrics import MetricsCollector, compare_strategies
-from anomaly.anomaly_detection import zscore_detection
+from anomaly.anomaly_detection import AnomalyDetector
+from anomaly.simulate_anomaly import AnomalySimulator
+from cost.cost_model import CloudCostModel, KubernetesCostModel
 
 
 def run_strategy_on_scenario(
@@ -39,10 +41,11 @@ def run_strategy_on_scenario(
     forecaster,
     load_series,
     forecast_horizon=1,
-    capacity_per_pod=500,
+    capacity_per_pod=100,  # FIXED: Reduced from 500 to 100 for realistic SLA violations
     step_minutes=5.0,
     data_source="synthetic",
     scenario_name="",
+    enable_advanced_metrics=True,
 ):
     """
     Simulate single autoscaling strategy on a load series.
@@ -52,7 +55,7 @@ def run_strategy_on_scenario(
     2. Apply forecaster for each timestep
     3. Run autoscaler step-by-step
     4. Track decisions and compute metrics
-    5. Return results
+    5. Return results with advanced anomaly detection and cost analysis
 
     Args:
         strategy_name: name of strategy (REACTIVE/PREDICTIVE/CPU_BASED/HYBRID)
@@ -64,12 +67,28 @@ def run_strategy_on_scenario(
         step_minutes: time interval between samples
         data_source: "synthetic" or "real"
         scenario_name: name of scenario
+        enable_advanced_metrics: Enable K8s HPA, AWS Auto Scaling metrics
 
     Returns:
         dict with results and metrics
     """
-    # Initialize metrics collection
-    metrics = MetricsCollector(capacity_per_pod, cost_per_pod_per_hour=0.05, step_minutes=step_minutes)
+    # Initialize metrics collection with advanced features
+    metrics = MetricsCollector(
+        capacity_per_pod, 
+        cost_per_pod_per_hour=0.05, 
+        step_minutes=step_minutes,
+        enable_k8s_metrics=enable_advanced_metrics,
+        enable_aws_metrics=enable_advanced_metrics,
+        enable_borg_metrics=False
+    )
+    
+    # Initialize anomaly detector
+    anomaly_detector = AnomalyDetector(
+        window_size=50,
+        zscore_threshold=3.0,
+        iqr_multiplier=1.5,
+        rate_threshold=0.5
+    )
 
     # Initialize pod count
     current_pods = 5
@@ -81,12 +100,43 @@ def run_strategy_on_scenario(
     for t in range(len(load_series)):
         actual_requests = float(load_series.iloc[t]["requests_count"])
 
-        # Anomaly detection
-        window_start = max(0, t - 10)
-        window_data = load_series.iloc[window_start : t + 1]["requests_count"].values
-        z_anomaly = (
-            zscore_detection(window_data, threshold=3.0)[-1] if len(window_data) > 0 else 0
-        )
+        # Advanced anomaly detection (multi-method ensemble)
+        is_anomaly = False
+        anomaly_reason = "Normal"
+        anomaly_confidence = 0.0
+        
+        if enable_advanced_metrics and t >= 10:
+            # Online anomaly detection
+            is_anomaly, anomaly_reason = anomaly_detector.update_online(actual_requests)
+            
+            # For backwards compatibility - z_anomaly flag
+            z_anomaly = 1 if is_anomaly else 0
+            
+            # Calculate confidence based on detection method
+            if "Rate spike" in anomaly_reason:
+                anomaly_confidence = 0.9
+            elif "Z-score" in anomaly_reason:
+                anomaly_confidence = 0.8
+            elif "IQR outlier" in anomaly_reason:
+                anomaly_confidence = 0.85
+            else:
+                anomaly_confidence = 0.0
+        else:
+            # Fallback to simple z-score
+            window_start = max(0, t - 10)
+            window_data = load_series.iloc[window_start : t + 1]["requests_count"].values
+            if len(window_data) > 3:
+                mean = np.mean(window_data)
+                std = np.std(window_data)
+                if std > 0:
+                    z_score = abs((actual_requests - mean) / std)
+                    z_anomaly = 1 if z_score > 3.0 else 0
+                    is_anomaly = z_anomaly == 1
+                    anomaly_confidence = min(z_score / 5.0, 1.0) if is_anomaly else 0.0
+                else:
+                    z_anomaly = 0
+            else:
+                z_anomaly = 0
 
         # === FORECASTING ===
         # Use ML models from demo/models/ for forecast
@@ -130,8 +180,15 @@ def run_strategy_on_scenario(
         else:
             raise ValueError(f"Unknown strategy: {strategy_name}")
 
-        # Record metrics (with SLA violation status BEFORE scaling)
-        metrics.record(t, new_pods, actual_requests, action, sla_before_scaling=sla_breached_before_scaling)
+        # Calculate CPU utilization (Kubernetes HPA style)
+        cpu_utilization = actual_requests / (new_pods * capacity_per_pod) if new_pods > 0 else 0.0
+        
+        # Record metrics (with SLA violation status BEFORE scaling + advanced metrics)
+        metrics.record(
+            t, new_pods, actual_requests, action, 
+            sla_before_scaling=sla_breached_before_scaling,
+            cpu_utilization=cpu_utilization
+        )
         actions.append(action)
 
         timestamp = load_series.iloc[t]["timestamp"] if "timestamp" in load_series.columns else t
@@ -147,6 +204,10 @@ def run_strategy_on_scenario(
                 "scaling_action": action,
                 "reason": reason,
                 "z_anomaly": z_anomaly,
+                "is_anomaly": is_anomaly,
+                "anomaly_reason": anomaly_reason,
+                "anomaly_confidence": anomaly_confidence,
+                "cpu_utilization": cpu_utilization,
                 "sla_breached_before_scaling": sla_breached_before_scaling,
             }
         )
@@ -164,9 +225,44 @@ def run_strategy_on_scenario(
         capacity_per_pod=capacity_per_pod,
     )
 
-    # Get aggregate metrics
+    # Get aggregate metrics (includes K8s HPA, AWS metrics if enabled)
     agg_metrics = metrics.compute_aggregate_metrics()
-
+    
+    # Compute advanced cost breakdown
+    cost_breakdown = {}
+    if enable_advanced_metrics:
+        # Cloud cost model (AWS/GCP/Azure style)
+        cloud_model = CloudCostModel(
+            on_demand_cost=0.05,
+            reserved_cost=0.03,
+            spot_cost=0.015,
+            startup_cost=0.001,
+            reserved_capacity=5
+        )
+        
+        cloud_total, cloud_breakdown = cloud_model.compute_total_cost(
+            pods_history, step_minutes=step_minutes, track_scaling_cost=True
+        )
+        
+        # Kubernetes cost model
+        k8s_model = KubernetesCostModel(
+            node_cost_per_hour=0.10,
+            pods_per_node=30,
+            node_overhead_pods=3
+        )
+        
+        k8s_result = k8s_model.compute_total_cost(pods_history, step_minutes=step_minutes)
+        
+        cost_breakdown = {
+            'simple_cost': agg_metrics.get('total_cost', 0),
+            'cloud_cost': float(cloud_total),
+            'cloud_breakdown': {k: float(v) for k, v in cloud_breakdown.items()},
+            'k8s_cost': float(k8s_result['total_cost']),
+            'k8s_packing_efficiency': float(k8s_result['packing_efficiency']),
+            'k8s_wasted_capacity': float(k8s_result['wasted_capacity']),
+            'savings_vs_simple': float((agg_metrics.get('total_cost', 0) - cloud_total) / max(agg_metrics.get('total_cost', 1), 0.01) * 100)
+        }
+    
     return {
         "strategy": strategy_name,
         "scenario": scenario_name,
@@ -174,6 +270,7 @@ def run_strategy_on_scenario(
         "records": records,
         "metrics": agg_metrics,
         "objective": objective,
+        "cost_breakdown": cost_breakdown,
     }
 
 
@@ -187,7 +284,7 @@ def run_all_simulations(
     scenarios=None,
     real_scenarios=None,  # Deprecated - kept for backward compatibility only
     strategies=None,
-    capacity_per_pod=500,
+    capacity_per_pod=100,  # FIXED: Reduced from 500 to create realistic SLA violations
     run_synthetic=True,
     run_real=False,  # Always False in PHASE B - real data not used for autoscaling tests
 ):

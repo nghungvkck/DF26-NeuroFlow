@@ -1,203 +1,180 @@
 # DataFlow 2026: Autoscaling Optimization Pipeline
 
-## Overview
+## Tổng quan
 
-A complete, production-ready **autoscaling optimization system** that demonstrates the full pipeline:
+Hệ thống mô phỏng autoscaling hoàn chỉnh, dễ demo, gồm 3 pha:
 
-```
-OBJECTIVE FUNCTION → SCALING POLICIES → TEST SCENARIOS → METRICS → OUTPUT
-```
+1. **Phase A**: Đánh giá model dự báo trên dữ liệu thực
+2. **Phase B**: Test autoscaling trên kịch bản synthetic
+3. **Phase C**: Anomaly detection + cost analysis nâng cao
 
-This system optimizes infrastructure cost, SLA compliance, and stability while handling diverse load patterns and forecast errors.
+Mục tiêu: tối ưu **chi phí**, **SLA**, và **độ ổn định** khi tải biến động.
 
 ---
 
-## Quick Start
+## Yêu cầu
 
-### 1. Run Full Simulation
+- Python 3.9+ (khuyến nghị 3.11)
+- Các thư viện: pandas, numpy, scikit-learn, statsmodels, plotly, streamlit, tensorflow (nếu dùng LSTM)
+
+Nếu thiếu, cài nhanh:
 
 ```bash
-python simulate.py
+pip install -r requirements.txt
 ```
 
-Generates comprehensive results comparing 4 autoscaling strategies across 5 load scenarios.
+---
 
-### 2. View Interactive Dashboard
+## Demo nhanh (khuyến nghị)
+
+### Bước 1: Chạy toàn bộ pipeline
+
+```bash
+python run_pipeline.py
+```
+
+Tạo ra các file kết quả trong thư mục results/.
+
+### Bước 2: Mở dashboard
 
 ```bash
 streamlit run dashboard/app.py
 ```
 
-Open http://localhost:8501 for visualizations and comparison metrics.
+Mở trình duyệt: http://localhost:8501
 
 ---
 
-## Pipeline Architecture
+## Demo chi tiết (theo pha)
 
-### 1. OBJECTIVE FUNCTION
+### ✅ Phase A: Model Evaluation (dữ liệu thực)
 
-**File:** `autoscaling/objective.py`
-
-Explicit multi-objective optimization combining three components:
+Nguồn dữ liệu thực nằm ở:
 
 ```
-Minimize: Cost + SLA_Violations + Scaling_Instability
-
-Where:
-- Cost = pod_count × cost_per_hour × time
-- SLA_Violations = timesteps_exceeding_capacity × penalty
-- Scaling_Instability = scaling_events × penalty
+data/real/
 ```
 
-**Key Functions:**
+Chạy riêng Phase A:
 
-- `compute_cost_objective()` - Infrastructure cost calculation
-- `compute_sla_violation_cost()` - SLA breach penalty
-- `compute_stability_cost()` - Flapping penalty
-- `compute_total_objective()` - Aggregated multi-objective
+```bash
+python run_pipeline.py --phase-a-only
+```
 
----
+Kết quả:
 
-### 2. SCALING POLICIES (4 Strategies)
+- results/model_evaluation.json
 
-#### A. **REACTIVE** (Baseline)
+### ✅ Phase B: Autoscaling Tests (synthetic)
 
-**File:** `autoscaling/reactive.py`
+Chạy riêng Phase B:
 
-- Responds to actual request load
-- Simple threshold-based: scale-out if utilization > 70%
-- Fast response but reactive, not proactive
-- **Best for:** Unpredictable load patterns
+```bash
+python run_pipeline.py --phase-b-only
+```
 
-#### B. **PREDICTIVE**
+Kết quả:
 
-**File:** `autoscaling/predictive.py`
+- results/simulation_results.csv
+- results/metrics_summary.json
 
-- Uses ARIMA forecasting to scale proactively
-- Scales based on predicted future load
-- Includes hysteresis and adaptive cooldown
-- **Best for:** Predictable patterns, gradual changes
+**Lưu ý:** capacity_per_pod mặc định = 100 để SLA violations thực tế.
 
-#### C. **CPU-BASED** (Traditional)
+### ✅ Phase C: Anomaly & Cost Analysis
 
-**File:** `autoscaling/cpu_based.py`
+Chạy riêng Phase C:
 
-- Threshold-based CPU utilization monitoring
-- Scale-out at 75% CPU, scale-in at 25%
-- Used as baseline for comparison
-- **Best for:** Comparison, traditional infrastructure
+```bash
+python run_pipeline.py --phase-c-only
+```
 
-#### D. **HYBRID** (Advanced)
+Kết quả:
 
-**File:** `autoscaling/hybrid.py`
-
-- Multi-layer decision hierarchy:
-  1. **Emergency**: If CPU > 95% → immediate scale-out
-  2. **Predictive**: Use forecast if reliable
-  3. **Reactive**: Fallback to real-time load
-  4. **Hold**: No scaling needed
-- Combines strengths of all approaches
-- **Best for:** Production systems needing robustness
+- results/anomaly_analysis.json
+- results/cost_breakdown.json
 
 ---
 
-### 3. STABILITY & ANTI-FLAPPING
+## Dashboard: 3 chế độ hiển thị
 
-**File:** `autoscaling/hysteresis.py`
+### 1) Autoscaling Tests
+- Load vs Forecast
+- Pod timeline
+- Cost analysis
+- SLA violations
+- Anomaly detection
+- Advanced metrics (K8s HPA, AWS Auto Scaling)
 
-Prevents rapid oscillation through:
+### 2) Model Evaluation
+- Best model theo timeframe (1m/5m/15m)
+- MAE / RMSE / MAPE
 
-- **Adaptive Cooldown**: Longer cooldown during volatile traffic
-- **Majority Hysteresis**: Requires consensus across N decisions
-- **Decision Smoothing**: Removes isolated contradictory actions
-
----
-
-### 4. TEST SCENARIOS
-
-**File:** `autoscaling/scenarios.py`
-
-Five realistic load patterns for comprehensive testing:
-
-1. **GRADUAL_INCREASE** (0→500 req/s over time)
-   - Business hours ramp-up
-   - Tests steady scaling
-
-2. **SUDDEN_SPIKE** (100→800 req/s jump)
-   - DDoS attack, viral event, flash sale
-   - Tests emergency responsiveness
-
-3. **OSCILLATING** (Sinusoidal load with noise)
-   - Diurnal patterns, batch jobs
-   - Tests flapping prevention
-
-4. **TRAFFIC_DROP** (Drop to 10%, gradual recovery)
-   - Service recovery, maintenance end
-   - Tests scale-down efficiency
-
-5. **FORECAST_ERROR_TEST** (Base + systematic bias + anomalies)
-   - Real-world forecast unreliability
-   - Tests robustness to prediction errors
-
-Each scenario includes:
-
-- Realistic noise
-- Forecast errors (15% underprediction, 10% overprediction bias)
-- Anomalies that forecaster misses
+### 3) Anomaly & Cost Analysis
+- F1/Precision/Recall cho anomaly detection
+- So sánh cost models (cloud, k8s, borg)
+- Platform metrics (HPA, Auto Scaling)
 
 ---
 
-### 5. COMPREHENSIVE METRICS
-
-**File:** `cost/metrics.py`
-
-**Cost Metrics:**
-
-- Total infrastructure cost
-- Average pod count
-- Cost per timestep
-- Overprovision ratio (wasted capacity %)
-
-**Performance Metrics:**
-
-- SLA violation count & rate
-- Mean reaction delay to load increase
-- Utilization (min/mean/max)
-
-**Stability Metrics:**
-
-- Number of scaling events
-- Oscillation count (flapping events)
-- Scale-out vs scale-in ratio
-
-**Aggregation:**
-`MetricsCollector` class tracks all metrics throughout simulation
-`compute_aggregate_metrics()` provides comprehensive summary
-
----
-
-### 6. FORECAST & FORECASTING
-
-**File:** `forecast/arima_forecaster.py`
-
-Uses ARIMA(2,1,2) for traffic prediction:
-
-- Trained on historical data (first 50% of scenario)
-- Produces 1-step-ahead forecasts
-- Forecast errors tracked for reliability assessment
-
----
-
-## Project Structure
+## Cấu trúc thư mục chính
 
 ```
 .
-├── autoscaling/
-│   ├── objective.py         # Multi-objective cost function
-│   ├── reactive.py          # Reactive autoscaler (baseline)
-│   ├── predictive.py        # Predictive autoscaler (forecast-based)
-│   ├── cpu_based.py         # CPU-threshold autoscaler
-│   ├── hybrid.py            # Hybrid multi-layer autoscaler
+├── autoscaling/        # Policies + scenarios
+├── anomaly/            # Anomaly detection + simulation
+├── cost/               # Cost models + metrics
+├── forecast/           # Forecasting models
+├── data/real/          # Dữ liệu thực để đánh giá model
+├── dashboard/          # Streamlit UI
+├── simulate.py         # Simulation logic
+├── run_pipeline.py     # Orchestrator
+└── results/            # Output files
+```
+
+---
+
+## Outputs quan trọng
+
+- results/model_evaluation.json
+- results/simulation_results.csv
+- results/metrics_summary.json
+- results/anomaly_analysis.json
+- results/cost_breakdown.json
+- results/pipeline_summary.json
+
+---
+
+## Lỗi thường gặp
+
+### 1) Phase A báo "No real data files"
+→ Kiểm tra thư mục [data/real](data/real) có dữ liệu hay chưa.
+
+### 2) SLA violations luôn 0
+→ Đảm bảo `capacity_per_pod = 100` (đã fix trong [simulate.py](simulate.py)).
+
+### 3) Dashboard báo thiếu results
+→ Chạy `python run_pipeline.py` trước.
+
+---
+
+## Mẹo demo ổn định
+
+- Chạy Phase B trước để có dữ liệu hiển thị nhanh.
+- Dùng dashboard tab **Anomaly Detection** để demo robustness.
+- Dùng tab **Cost Models** để nói về tối ưu chi phí cloud.
+
+---
+
+## TL;DR (demo 30s)
+
+```bash
+python run_pipeline.py
+streamlit run dashboard/app.py
+```
+
+---
+
+Nếu cần mở rộng: xem các file trong folders autoscaling/, anomaly/, cost/, forecast/.
 │   ├── hysteresis.py        # Anti-flapping mechanisms
 │   └── scenarios.py         # Load scenario generators
 ├── cost/

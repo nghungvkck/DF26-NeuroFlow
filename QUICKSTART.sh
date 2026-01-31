@@ -15,7 +15,7 @@ python --version
 # Step 2: Install dependencies
 echo
 echo "✓ Installing dependencies..."
-pip install pandas numpy scikit-learn statsmodels plotly streamlit
+pip install pandas numpy scikit-learn statsmodels plotly streamlit tensorflow
 
 # Step 3: Run simulation
 echo

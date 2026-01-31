@@ -39,13 +39,14 @@ class ModelEvaluator:
             real_data_dir: path to directory containing real data CSVs
         """
         if real_data_dir is None:
-            # Try relative paths first
+            # Try relative paths first - updated to use data/real
             candidates = [
-                Path("../processed_for_modeling_v2"),
+                Path("data/real"),
+                Path("../data/real"),
                 Path("processed_for_modeling_v2"),
-                Path("/Users/maydothi/Documents/dataflow/processed_for_modeling_v2"),
+                Path("../processed_for_modeling_v2"),
             ]
-            real_data_dir = "processed_for_modeling_v2"
+            real_data_dir = "data/real"
             for candidate in candidates:
                 if candidate.exists():
                     real_data_dir = str(candidate)

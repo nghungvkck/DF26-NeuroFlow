@@ -1,0 +1,52 @@
+{
+  "cost_models": {
+    "simple_linear": {
+      "total_cost": 10.25,
+      "cost_per_pod": 0.05,
+      "model": "baseline"
+    },
+    "cloud_mixed": {
+      "total_cost": 6.469166666666661,
+      "breakdown": {
+        "reserved": 2.7500000000000053,
+        "on_demand": 2.041666666666664,
+        "spot": 1.0874999999999986,
+        "startup": 0.1550000000000001,
+        "interruption": 0.43500000000000033,
+        "total": 6.469166666666661
+      },
+      "model": "aws_gcp_azure_mixed_instances",
+      "savings_vs_simple": 36.88617886178867
+    },
+    "kubernetes": {
+      "total_cost": 1.8333333333333293,
+      "avg_nodes": 1.0,
+      "packing_efficiency": 0.41414141414141414,
+      "wasted_capacity_pct": 58.58585858585859,
+      "model": "kubernetes_node_pools"
+    },
+    "borg_production": {
+      "total_cost": 8.416666666666684,
+      "priority": "production",
+      "model": "google_borg"
+    },
+    "borg_batch": {
+      "total_cost": 4.708333333333332,
+      "priority": "batch",
+      "model": "google_borg",
+      "savings_vs_production": 44.05940594059419
+    }
+  },
+  "platform_metrics": {
+    "kubernetes_hpa": {
+      "avg_cpu_utilization": 0.7579151100757904,
+      "cpu_target_breaches": 152,
+      "hpa_trigger_rate": 0.4772727272727273
+    },
+    "aws_auto_scaling": {
+      "warm_up_time_ratio": 1.0,
+      "cooldown_effectiveness": 0.95,
+      "target_tracking_breaches": 220
+    }
+  }
+}

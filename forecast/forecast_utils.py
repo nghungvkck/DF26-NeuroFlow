@@ -35,7 +35,9 @@ def _infer_step(df: pd.DataFrame) -> pd.Timedelta:
         if deltas.empty:
             return pd.Timedelta(minutes=5)
         return deltas.median()
-    return pd.tseries.frequencies.to_offset(inferred).delta
+    # Use pd.Timedelta instead of deprecated .delta
+    offset = pd.tseries.frequencies.to_offset(inferred)
+    return pd.Timedelta(offset)
 
 
 def _build_future_timestamps(last_ts: pd.Timestamp, step: pd.Timedelta, horizon: int) -> pd.Series:
