@@ -12,6 +12,7 @@ from utils.forecast import (
     load_model_metrics,
     discover_models
 )
+from utils.metrics_forecast import forecast_metrics_lightgbm
 
 app = FastAPI(
     title="Time Series Forecasting API",
@@ -20,6 +21,45 @@ app = FastAPI(
 )
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
+
+
+class MetricDataPoint(BaseModel):
+    timestamp: str = Field(..., description="Timestamp in ISO format or any parseable format (e.g., '12:00', '2024-01-01 12:05')")
+    requests: float = Field(..., description="Number of requests in this period", ge=0)
+
+
+class MetricsForecastRequest(BaseModel):
+    timeframe: str = Field("5m", description="Time interval (currently only '5m' supported)")
+    history: List[MetricDataPoint] = Field(..., description="Historical metrics data (minimum 6 points)")
+    horizon_steps: int = Field(..., description="Number of future periods to forecast", ge=1, le=100)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "timeframe": "5m",
+                "history": [
+                    {"timestamp": "12:00", "requests": 410},
+                    {"timestamp": "12:05", "requests": 435},
+                    {"timestamp": "12:10", "requests": 460},
+                    {"timestamp": "12:15", "requests": 490},
+                    {"timestamp": "12:20", "requests": 520},
+                    {"timestamp": "12:25", "requests": 550}
+                ],
+                "horizon_steps": 3
+            }
+        }
+
+
+class ForecastDataPoint(BaseModel):
+    step: int = Field(..., description="Forecast step (1-based)")
+    predicted_requests: float = Field(..., description="Predicted requests for this step")
+
+
+class MetricsForecastResponse(BaseModel):
+    success: bool
+    message: str
+    model_used: Optional[str] = None
+    forecast: Optional[List[ForecastDataPoint]] = None
 
 
 class ForecastRequest(BaseModel):
@@ -88,12 +128,14 @@ class ModelsResponse(BaseModel):
 async def root():
     return {
         "api": "Time Series Forecasting API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "status": "running",
+        "description": "System metrics forecasting for autoscaling decisions",
         "endpoints": {
-            "POST /forecast/predict": "Forward forecasting",
-            "POST /forecast/backtest": "Historical backtesting",
-            "GET /metrics/{model_type}/{timeframe}": "Get model metrics",
+            "POST /forecast/metrics": "Forecast from system metrics (recommended for production)",
+            "POST /forecast/predict": "Legacy: Forward forecasting with raw data",
+            "POST /forecast/backtest": "Legacy: Historical backtesting",
+            "GET /metrics/{model_type}/{timeframe}": "Get model performance metrics",
             "GET /models": "Discover available models",
             "GET /health": "Health check"
         }
@@ -109,7 +151,73 @@ async def health_check():
     }
 
 
-@app.post("/forecast/predict", response_model=ForecastResponse, tags=["Forecasting"])
+@app.post("/forecast/metrics", response_model=MetricsForecastResponse, tags=["Forecasting"])
+async def forecast_from_metrics(request: MetricsForecastRequest):
+    """
+    Forecast autoscaling metrics from system monitoring data.
+    
+    This is the production-ready endpoint for autoscaling forecasting.
+    It accepts aggregated system metrics (timestamps + request counts)
+    and returns predicted request volumes for future periods.
+    
+    The API handles all feature engineering internally:
+    - Lag features (1h, 1d lookback)
+    - Rolling statistics (5m, 1h windows)
+    - Time-based features (hour, day cyclical encoding)
+    - Burst detection
+    
+    No ML knowledge required from the caller.
+    """
+    try:
+        # Validate timeframe
+        if request.timeframe != "5m":
+            raise HTTPException(
+                status_code=400,
+                detail="Currently only timeframe='5m' is supported"
+            )
+        
+        # Convert Pydantic objects to dicts for processing
+        history = [
+            {"timestamp": point.timestamp, "requests": point.requests}
+            for point in request.history
+        ]
+        
+        # Call forecasting function
+        success, message, forecast = forecast_metrics_lightgbm(
+            history=history,
+            horizon_steps=request.horizon_steps,
+            model_dir=MODEL_DIR
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail=message
+            )
+        
+        # Convert forecast list to Pydantic objects
+        forecast_points = [
+            ForecastDataPoint(step=f["step"], predicted_requests=f["predicted_requests"])
+            for f in forecast
+        ]
+        
+        return MetricsForecastResponse(
+            success=True,
+            message=message,
+            model_used="LightGBM_5m",
+            forecast=forecast_points
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Forecast error: {str(e)}"
+        )
+
+
+
 async def predict(request: ForecastRequest):
     try:
         df = pd.DataFrame(request.data)

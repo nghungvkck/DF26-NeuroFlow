@@ -46,6 +46,10 @@ def render_forecast_tab(df, forecast_next, model_dir):
             
             if os.path.exists(pred_path):
                 pred_df = pd.read_csv(pred_path)
+                # Filter to test set only if split column exists
+                if "split" in pred_df.columns:
+                    pred_df = pred_df[pred_df["split"] == "test"]
+                
                 if 'predicted' in pred_df.columns:
                     predictions = pred_df['predicted'].values
                     status = f"xgboost_csv_{timeframe}"
@@ -57,6 +61,10 @@ def render_forecast_tab(df, forecast_next, model_dir):
             
             if os.path.exists(pred_path):
                 pred_df = pd.read_csv(pred_path)
+                # Filter to test set only if split column exists
+                if "split" in pred_df.columns:
+                    pred_df = pred_df[pred_df["split"] == "test"]
+                
                 if 'predicted' in pred_df.columns:
                     predictions = pred_df['predicted'].values
                     status = f"lightgbm_csv_{timeframe}"
@@ -69,9 +77,17 @@ def render_forecast_tab(df, forecast_next, model_dir):
             
             if os.path.exists(pred_path):
                 pred_df = pd.read_csv(pred_path)
-                if 'predicted' in pred_df.columns:
+                # Filter to test set only if split column exists
+                if "split" in pred_df.columns:
+                    pred_df = pred_df[pred_df["split"] == "test"]
+                
+                # Use hybrid_predicted (Prophet + LSTM) instead of just predicted (Prophet baseline)
+                if 'hybrid_predicted' in pred_df.columns:
+                    predictions = pred_df['hybrid_predicted'].values
+                    status = f"hybrid_csv_{timeframe}"
+                elif 'predicted' in pred_df.columns:
                     predictions = pred_df['predicted'].values
-                    status = f"hybrid_{timeframe}"
+                    status = f"hybrid_baseline_{timeframe}"
             else:
                 st.warning("Hybrid predictions not found in demo/models. Add demo/models/hybrid_*_predictions.csv to enable this view.")
         

@@ -1,387 +1,372 @@
+"""
+Metrics-based Forecast API Demo for Autoscaling
+"""
+
 import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
 import altair as alt
+import os
 
 
 @st.cache_data
-def load_sample_data(filename="data/train_5m_autoscaling.csv"):
-    """Load and cache sample data"""
-    df = pd.read_csv(filename)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df = df.rename(columns={'timestamp': 'ds', 'requests_count': 'y'})
-    return df
+def load_sample_metrics(filename=None):
+    """Load and cache sample monitoring metrics"""
+    try:
+        if filename is None:
+            # Try multiple paths
+            possible_paths = [
+                "data/test_5m_autoscaling.csv",
+                "../data/test_5m_autoscaling.csv",
+                os.path.join(os.path.dirname(__file__), "..", "data", "test_5m_autoscaling.csv")
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    filename = path
+                    break
+            else:
+                return None
+        
+        df = pd.read_csv(filename)
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df = df[['timestamp', 'requests_count']].copy()
+        df = df.rename(columns={'requests_count': 'requests'})
+        return df
+    except Exception as e:
+        st.error(f"Error loading sample data: {str(e)}")
+        return None
 
 
 def render_api_demo_tab():
+    """Render the API demo tab"""
     
-    st.header("API Demo - Dự đoán qua REST API")
+    st.header("📡 API Demo - Metrics Forecast")
     
-    # API configuration
-    col1, col2 = st.columns([2, 1])
+    st.markdown("""
+    Forecast request volumes using the production metrics API.
+    
+    **Input:** Timestamps + request counts  
+    **Output:** Predicted requests for future periods  
+    **Features:** Automated server-side (no ML knowledge needed)
+    """)
+
+    if "api_demo_ready" not in st.session_state:
+        st.session_state.api_demo_ready = True
+    
+    # API Configuration
+    st.subheader("API Configuration")
+    col1, col2, col3 = st.columns([3, 1, 1])
+    
     with col1:
         api_url = st.text_input(
-            "API Base URL",
+            "API URL",
             value="http://localhost:8000",
-            help="URL của API server (mặc định: http://localhost:8000)"
+            help="URL of forecast API server"
         )
+    
     with col2:
-        if st.button("🔍 Kiểm tra kết nối"):
+        if st.button("Test Connection"):
             try:
-                response = requests.get(f"{api_url}/health", timeout=5)
-                if response.status_code == 200:
-                    st.success("✅ API đang hoạt động")
-                    health_data = response.json()
-                    st.json(health_data)
+                r = requests.get(f"{api_url}/health", timeout=3)
+                if r.status_code == 200:
+                    st.success("✅ Connected")
                 else:
-                    st.error(f"❌ API lỗi: {response.status_code}")
+                    st.error(f"Error {r.status_code}")
             except Exception as e:
-                st.error(f"❌ Không thể kết nối: {str(e)}")
+                st.error(f"Failed: {str(e)[:50]}")
+
+    with col3:
+        request_timeout = st.number_input(
+            "Timeout (s)",
+            min_value=3,
+            max_value=60,
+            value=15,
+            step=1,
+            help="Max wait time for the forecast API"
+        )
     
     st.divider()
     
-    demo_mode = st.radio(
-        "Chọn chế độ demo",
-        ["📊 Dữ liệu mẫu", "📁 Upload CSV", "✍️ Nhập thủ công"],
-        horizontal=True
+    # Data Input
+    st.subheader("Input Data")
+    
+    mode = st.radio(
+        "Choose data source:",
+        ["Sample Data", "Upload CSV", "Manual Input"],
+        horizontal=True,
+        label_visibility="collapsed"
     )
     
-    df_input = None
+    df_history = st.session_state.get("api_demo_history")
     
-    if demo_mode == "📊 Dữ liệu mẫu":
-        st.subheader("Dữ liệu mẫu")
+    if mode == "Sample Data":
+        with st.form("sample_data_form"):
+            window = st.selectbox(
+                "Time window:",
+                [("Last 30 min (6 points)", 6), 
+                 ("Last 1 hour (12 points)", 12),
+                 ("Last 3 hours (36 points)", 36)],
+                format_func=lambda x: x[0]
+            )
+            load_sample = st.form_submit_button("Load Sample Data")
         
-        sample_option = st.selectbox(
-            "Chọn tập dữ liệu mẫu",
-            ["5 phút gần nhất", "1 giờ gần nhất", "1 ngày gần nhất"]
-        )
-        
-        try:
-            df_full = load_sample_data()
-            
-            if sample_option == "5 phút gần nhất":
-                df_input = df_full.tail(1)
-            elif sample_option == "1 giờ gần nhất":
-                df_input = df_full.tail(12)
+        if load_sample:
+            df_full = load_sample_metrics()
+            if df_full is not None:
+                n = window[1]
+                df_history = df_full.tail(n).reset_index(drop=True)
+                st.session_state["api_demo_history"] = df_history
+                st.info(f"📊 Loaded {len(df_history)} data points")
             else:
-                df_input = df_full.tail(288)
-            
-            st.info(f"📊 Đã load {len(df_input)} dòng dữ liệu")
-            st.dataframe(df_input[['ds', 'y']].head(10), use_container_width=True)
-            
-            if len(df_input) > 10:
-                st.caption(f"... và {len(df_input) - 10} dòng nữa")
-                
-        except Exception as e:
-            st.error(f"Lỗi load dữ liệu mẫu: {str(e)}")
+                st.error("Sample data not found")
+        
+        if "api_demo_history" in st.session_state:
+            df_history = st.session_state["api_demo_history"]
+            with st.expander("Show data", expanded=False):
+                display_df = df_history.copy()
+                display_df['timestamp'] = display_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M')
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
     
-    elif demo_mode == "📁 Upload CSV":
-        st.subheader("Upload file CSV")
-        
-        uploaded_file = st.file_uploader(
-            "Chọn file CSV (phải có cột 'ds' và 'y')",
-            type=['csv'],
-            help="File CSV phải có 2 cột: 'ds' (timestamp) và 'y' (giá trị)"
-        )
-        
-        if uploaded_file is not None:
+    elif mode == "Upload CSV":
+        uploaded = st.file_uploader("CSV file (timestamp, requests)", type=['csv'])
+        if uploaded:
             try:
-                df_input = pd.read_csv(uploaded_file)
-                df_input['ds'] = pd.to_datetime(df_input['ds'])
-                
-                st.success(f"✅ Đã load {len(df_input)} dòng dữ liệu")
-                st.dataframe(df_input[['ds', 'y']].head(10), use_container_width=True)
-                
-                if len(df_input) > 10:
-                    st.caption(f"... và {len(df_input) - 10} dòng nữa")
-                    
+                df_history = pd.read_csv(uploaded)
+                df_history['timestamp'] = pd.to_datetime(df_history['timestamp'])
+                if 'requests_count' in df_history.columns:
+                    df_history = df_history.rename(columns={'requests_count': 'requests'})
+                st.session_state["api_demo_history"] = df_history
+                st.success(f"✅ Loaded {len(df_history)} rows")
             except Exception as e:
-                st.error(f"Lỗi đọc file: {str(e)}")
+                st.error(f"Error: {str(e)}")
     
-    else:
-        st.subheader("Nhập dữ liệu thủ công")
+    else:  # Manual
+        n = st.number_input("Number of points:", 6, 100, 12)
+        now = datetime.now().replace(second=0, microsecond=0)
         
-        num_rows = st.number_input(
-            "Số dòng dữ liệu",
-            min_value=1,
-            max_value=50,
-            value=5,
-            help="Số lượng điểm dữ liệu lịch sử để nhập"
-        )
+        with st.form("manual_input_form"):
+            rows = []
+            for i in range(n):
+                col1, col2 = st.columns([2, 1])
+                ts = now - timedelta(minutes=5*(n-1-i))
+                
+                with col1:
+                    ts_input = st.text_input(
+                        "ts", ts.strftime("%Y-%m-%d %H:%M"),
+                        key=f"ts_{i}", label_visibility="collapsed"
+                    )
+                with col2:
+                    val = st.number_input(
+                        "val",
+                        min_value=0.0,
+                        value=float(300 + i * 20),
+                        step=1.0,
+                        key=f"val_{i}",
+                        label_visibility="collapsed"
+                    )
+                
+                rows.append({"timestamp": ts_input, "requests": val})
+            
+            submitted = st.form_submit_button("Confirm")
         
-        end_time = datetime.now().replace(second=0, microsecond=0)
-        timestamps = [end_time - timedelta(minutes=5*i) for i in range(num_rows, 0, -1)]
-        
-        data_rows = []
-        for i, ts in enumerate(timestamps):
-            col1, col2 = st.columns(2)
-            with col1:
-                ds = st.text_input(
-                    f"Timestamp {i+1}",
-                    value=ts.strftime("%Y-%m-%d %H:%M:%S"),
-                    key=f"ds_{i}"
-                )
-            with col2:
-                y = st.number_input(
-                    f"Giá trị {i+1}",
-                    min_value=0,
-                    value=100 + i*10,
-                    key=f"y_{i}"
-                )
-            data_rows.append({"ds": ds, "y": y})
-        
-        if st.button("✅ Xác nhận dữ liệu"):
-            df_input = pd.DataFrame(data_rows)
-            df_input['ds'] = pd.to_datetime(df_input['ds'])
-            st.success("Dữ liệu đã sẵn sàng!")
-            st.dataframe(df_input, use_container_width=True)
+        if submitted:
+            df_history = pd.DataFrame(rows)
+            df_history['timestamp'] = pd.to_datetime(df_history['timestamp'])
+            st.session_state["api_demo_history"] = df_history
+            st.success("Ready!")
     
     st.divider()
     
-    if df_input is not None and len(df_input) > 0:
-        st.subheader("⚙️ Cấu hình dự đoán")
+    # Forecast
+    if df_history is not None and len(df_history) >= 6:
+        st.subheader("Forecast")
         
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            model_type = st.selectbox(
-                "Model",
-                ["xgboost", "hybrid", "lightgbm"],
-                help="Loại model để dự đoán"
-            )
-        
-        with col2:
-            timeframe = st.selectbox(
-                "Timeframe",
-                ["5m", "15m", "1m"],
-                help="Độ phân giải thời gian"
-            )
-        
-        with col3:
-            horizon = st.number_input(
-                "Số bước dự đoán",
-                min_value=1,
-                max_value=50,
-                value=12,
-                help="Số bước thời gian cần dự đoán"
-            )
-        
-        if st.button("🚀 Gọi API dự đoán", type="primary", use_container_width=True):
-            with st.spinner("⏳ Đang gọi API..."):
-                try:
-                    payload = {
-                        "data": df_input[['ds', 'y']].to_dict('records'),
-                        "horizon": horizon,
-                        "model_type": model_type,
-                        "timeframe": timeframe
-                    }
-                    
-                    for row in payload['data']:
-                        row['ds'] = str(row['ds'])
-                    
-                    response = requests.post(
-                        f"{api_url}/forecast/predict",
-                        json=payload,
-                        timeout=30
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        
-                        if result['success']:
-                            st.success("✅ Dự đoán thành công!")
-                            
-                            predictions = pd.DataFrame(result['predictions'])
-                            predictions['ds'] = pd.to_datetime(predictions['ds'])
-                            
-                            tab1, tab2, tab3 = st.tabs(["📊 Biểu đồ", "📋 Bảng dữ liệu", "🔧 JSON Response"])
-                            
-                            with tab1:
-                                st.subheader("Kết quả dự đoán")
-                                
-                                df_hist = df_input[['ds', 'y']].copy()
-                                df_hist['type'] = 'Lịch sử'
-                                df_hist = df_hist.rename(columns={'y': 'value'})
-                                
-                                df_pred = predictions[['ds', 'yhat']].copy()
-                                df_pred['type'] = 'Dự đoán'
-                                df_pred = df_pred.rename(columns={'yhat': 'value'})
-                                
-                                df_plot = pd.concat([df_hist, df_pred], ignore_index=True)
-                                
-                                chart = alt.Chart(df_plot).mark_line(point=True).encode(
-                                    x=alt.X('ds:T', title='Thời gian'),
-                                    y=alt.Y('value:Q', title='Giá trị'),
-                                    color=alt.Color('type:N', 
-                                                   scale=alt.Scale(
-                                                       domain=['Lịch sử', 'Dự đoán'],
-                                                       range=['#1f77b4', '#ff7f0e']
-                                                   ),
-                                                   legend=alt.Legend(title='Loại')),
-                                    strokeDash=alt.StrokeDash('type:N',
-                                                             scale=alt.Scale(
-                                                                 domain=['Lịch sử', 'Dự đoán'],
-                                                                 range=[[0], [5, 5]]
-                                                             ))
-                                ).properties(
-                                    width=700,
-                                    height=400,
-                                    title=f"Dự đoán với {model_type.upper()} ({timeframe})"
-                                ).interactive()
-                                
-                                st.altair_chart(chart, use_container_width=True)
-                                
-                                if 'yhat_lower' in predictions.columns and 'yhat_upper' in predictions.columns:
-                                    st.caption("Khoảng tin cậy được hiển thị trong bảng dữ liệu")
-                            
-                            with tab2:
-                                st.subheader("Dữ liệu dự đoán chi tiết")
-                                
-                                display_df = predictions.copy()
-                                if 'ds' in display_df.columns:
-                                    display_df['ds'] = display_df['ds'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                                
-                                numeric_cols = display_df.select_dtypes(include=['float64']).columns
-                                display_df[numeric_cols] = display_df[numeric_cols].round(2)
-                                
-                                st.dataframe(display_df, use_container_width=True)
-                                
-                                csv = display_df.to_csv(index=False)
-                                st.download_button(
-                                    label="Tải xuống CSV",
-                                    data=csv,
-                                    file_name=f"predictions_{model_type}_{timeframe}.csv",
-                                    mime="text/csv"
-                                )
-                            
-                            with tab3:
-                                st.subheader("Raw API Response")
-                                st.json(result)
-                        
-                        else:
-                            st.error(f"❌ Dự đoán thất bại: {result.get('message', 'Unknown error')}")
-                    
-                    else:
-                        st.error(f"❌ API trả về lỗi: {response.status_code}")
-                        try:
-                            error_detail = response.json()
-                            st.json(error_detail)
-                        except:
-                            st.text(response.text)
-                
-                except requests.exceptions.Timeout:
-                    st.error("⏱️ Request timeout - API mất quá nhiều thời gian để phản hồi")
-                except requests.exceptions.ConnectionError:
-                    st.error("🔌 Không thể kết nối đến API. Hãy chắc chắn API server đang chạy!")
-                except Exception as e:
-                    st.error(f"❌ Lỗi: {str(e)}")
-                    st.exception(e)
-        
-        st.divider()
-        st.subheader("Metrics API Demo")
+        if "api_demo_forecast" not in st.session_state:
+            st.session_state.api_demo_forecast = None
+        if "api_demo_error" not in st.session_state:
+            st.session_state.api_demo_error = None
         
         col1, col2 = st.columns(2)
         with col1:
-            metrics_model = st.selectbox(
-                "Model cho metrics",
-                ["xgboost", "hybrid", "lightgbm"],
-                key="metrics_model"
-            )
+            horizon = st.slider("Forecast horizon:", 1, 48, 12, key="api_demo_horizon")
         with col2:
-            metrics_timeframe = st.selectbox(
-                "Timeframe cho metrics",
-                ["5m", "15m", "1m"],
-                key="metrics_timeframe"
-            )
+            st.metric("Input points", len(df_history))
         
-        if st.button("Lấy Metrics", use_container_width=True):
-            with st.spinner("⏳ Đang tải metrics..."):
+        if st.button("🚀 Forecast", type="primary", use_container_width=True):
+            with st.status("Calling forecast API...", expanded=False) as status:
+                status.write("Preparing request payload")
                 try:
-                    response = requests.get(
-                        f"{api_url}/metrics/{metrics_model}/{metrics_timeframe}",
-                        timeout=10
+                    history = [{
+                        "timestamp": row['timestamp'].isoformat(),
+                        "requests": float(row['requests'])
+                    } for _, row in df_history.iterrows()]
+                    
+                    payload = {
+                        "timeframe": "5m",
+                        "history": history,
+                        "horizon_steps": horizon
+                    }
+
+                    status.write("Sending request")
+                    
+                    r = requests.post(
+                        f"{api_url}/forecast/metrics",
+                        json=payload,
+                        timeout=request_timeout
                     )
                     
-                    if response.status_code == 200:
-                        metrics_result = response.json()
-                        
-                        if metrics_result['success']:
-                            st.success("✅ Metrics đã tải thành công!")
-                            
-                            metrics = metrics_result['metrics']
-                            
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("MAE", f"{metrics['mae']:.2f}")
-                            with col2:
-                                st.metric("RMSE", f"{metrics['rmse']:.2f}")
-                            with col3:
-                                st.metric("MAPE", f"{metrics['mape']:.2f}%")
-                            
-                            with st.expander("🔧 Raw JSON Response"):
-                                st.json(metrics_result)
-                        else:
-                            st.warning(f"⚠️ {metrics_result.get('message', 'Metrics not found')}")
+                    if r.status_code != 200:
+                        st.session_state.api_demo_error = f"API error {r.status_code}"
+                        st.session_state.api_demo_forecast = None
+                        status.update(label="Request failed", state="error")
                     else:
-                        st.error(f"❌ API error: {response.status_code}")
-                
+                        result = r.json()
+                        if not result.get('success'):
+                            st.session_state.api_demo_error = result.get('message', 'Forecast failed')
+                            st.session_state.api_demo_forecast = None
+                            status.update(label="Forecast failed", state="error")
+                        else:
+                            st.session_state.api_demo_error = None
+                            st.session_state.api_demo_forecast = result
+                            status.update(label="Forecast complete", state="complete")
+                except requests.exceptions.ConnectionError:
+                    st.session_state.api_demo_error = f"Cannot connect to {api_url}"
+                    st.session_state.api_demo_forecast = None
+                    status.update(label="Connection error", state="error")
+                except requests.exceptions.Timeout:
+                    st.session_state.api_demo_error = "API timeout"
+                    st.session_state.api_demo_forecast = None
+                    status.update(label="Request timed out", state="error")
                 except Exception as e:
-                    st.error(f"❌ Lỗi: {str(e)}")
+                    st.session_state.api_demo_error = f"Error: {str(e)}"
+                    st.session_state.api_demo_forecast = None
+                    status.update(label="Unexpected error", state="error")
+        
+        if st.session_state.api_demo_error:
+            st.error(st.session_state.api_demo_error)
+        
+        if st.session_state.api_demo_forecast:
+            result = st.session_state.api_demo_forecast
+            st.success("✅ Forecast complete")
+            forecast_data = result['forecast']
+            
+            tab1, tab2, tab3 = st.tabs(["📊 Chart", "📋 Data", "📄 JSON"])
+            
+            with tab1:
+                hist_df = df_history.copy()
+                hist_df['type'] = 'Historical'
+                hist_df = hist_df.rename(columns={'requests': 'value'})
+                
+                last_ts = df_history['timestamp'].iloc[-1]
+                forecast_ts = [
+                    last_ts + timedelta(minutes=5*(i+1))
+                    for i in range(len(forecast_data))
+                ]
+                
+                forecast_df = pd.DataFrame({
+                    'timestamp': forecast_ts,
+                    'value': [f['predicted_requests'] for f in forecast_data],
+                    'type': 'Forecast'
+                })
+                
+                chart_data = pd.concat(
+                    [hist_df[['timestamp', 'value', 'type']], forecast_df],
+                    ignore_index=True
+                )
+                
+                chart = alt.Chart(chart_data).mark_line(point=True).encode(
+                    x=alt.X('timestamp:T', title='Time'),
+                    y=alt.Y('value:Q', title='Requests'),
+                    color=alt.Color(
+                        'type:N',
+                        scale=alt.Scale(
+                            domain=['Historical', 'Forecast'],
+                            range=['#1f77b4', '#ff7f0e']
+                        )
+                    ),
+                    strokeDash=alt.StrokeDash(
+                        'type:N',
+                        scale=alt.Scale(
+                            domain=['Historical', 'Forecast'],
+                            range=[[0], [5, 5]]
+                        )
+                    )
+                ).properties(width=700, height=400, title="Forecast Results").interactive()
+                
+                st.altair_chart(chart, use_container_width=True)
+                
+                col1, col2, col3, col4 = st.columns(4)
+                hist_vals = df_history['requests'].values
+                pred_vals = [f['predicted_requests'] for f in forecast_data]
+                
+                with col1:
+                    st.metric("Hist Mean", f"{hist_vals.mean():.0f}")
+                with col2:
+                    st.metric("Hist Peak", f"{hist_vals.max():.0f}")
+                with col3:
+                    st.metric("Pred Mean", f"{sum(pred_vals)/len(pred_vals):.0f}")
+                with col4:
+                    st.metric("Pred Peak", f"{max(pred_vals):.0f}")
+            
+            with tab2:
+                forecast_df = pd.DataFrame(forecast_data)
+                forecast_df['step_minutes'] = forecast_df['step'] * 5
+                st.dataframe(
+                    forecast_df[['step', 'step_minutes', 'predicted_requests']],
+                    use_container_width=True, hide_index=True
+                )
+                
+                csv = forecast_df.to_csv(index=False)
+                st.download_button("📥 Download CSV", csv, "forecast.csv", "text/csv")
+            
+            with tab3:
+                st.json(result)
     
     else:
-        st.info("👆 Hãy chọn hoặc nhập dữ liệu ở trên để bắt đầu dự đoán")
+        st.info("⬆️ Load or enter data (min 6 points) to forecast")
     
-    with st.expander("📖 Hướng dẫn sử dụng API"):
+    # Documentation
+    st.divider()
+    st.subheader("Documentation")
+    
+    with st.expander("Endpoint Format"):
         st.markdown("""
-        ### Các endpoint có sẵn:
+        **POST /forecast/metrics**
         
-        **1. Health Check**
-        ```bash
-        GET /health
-        ```
-        
-        **2. Forward Prediction**
-        ```bash
-        POST /forecast/predict
-        Content-Type: application/json
-        
+        Request:
+        ```json
         {
-            "data": [{"ds": "2023-01-01 00:00:00", "y": 100}],
-            "horizon": 12,
-            "model_type": "xgboost",
-            "timeframe": "5m"
+          "timeframe": "5m",
+          "history": [
+            {"timestamp": "2024-01-01T12:00", "requests": 410},
+            {"timestamp": "2024-01-01T12:05", "requests": 435}
+          ],
+          "horizon_steps": 3
         }
         ```
         
-        **3. Get Metrics**
-        ```bash
-        GET /metrics/{model_type}/{timeframe}
+        Response:
+        ```json
+        {
+          "success": true,
+          "model_used": "LightGBM_5m",
+          "forecast": [
+            {"step": 1, "predicted_requests": 450},
+            {"step": 2, "predicted_requests": 465}
+          ]
+        }
         ```
-        
-        **4. List Available Models**
-        ```bash
-        GET /models
-        ```
-        
-        ### Python Example:
-        ```python
-        import requests
-        
-        # API call
-        response = requests.post(
-            "http://localhost:8000/forecast/predict",
-            json={
-                "data": [{"ds": "2023-01-01 00:00:00", "y": 100}],
-                "horizon": 12,
-                "model_type": "xgboost",
-                "timeframe": "5m"
-            }
-        )
-        
-        result = response.json()
-        print(result['predictions'])
-        ```
-        
+        """)
     
+    with st.expander("Features"):
+        st.markdown("""
+        **Automatic Feature Engineering:**
+        - Time: hour_of_day, day_of_week, cyclical encoding
+        - Lags: 5m, 15m, 6h, 1d
+        - Rolling: mean/max over 1h window
+        - Burst: detection + ratio metrics
+        
+        All handled server-side. Just send timestamps + requests!
         """)

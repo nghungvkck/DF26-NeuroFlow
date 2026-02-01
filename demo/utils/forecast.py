@@ -338,6 +338,65 @@ def _predict_xgboost_rolling(
         return None
 
 
+def _predict_hybrid_from_csv(
+    df: pd.DataFrame,
+    horizon: int,
+    timeframe: str,
+    model_dir: str | None = None,
+) -> list[float] | None:
+    """Load hybrid model predictions from CSV file"""
+    if model_dir is None:
+        model_dir = DEFAULT_MODEL_DIR
+
+    candidates = [
+        os.path.join(model_dir, f"hybrid_{timeframe}_predictions.csv"),
+    ]
+
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                pred_df = pd.read_csv(path)
+                
+                # Filter by split if column exists (use only test data for live forecasting)
+                if "split" in pred_df.columns:
+                    pred_df = pred_df[pred_df["split"] == "test"].copy()
+                
+                if pred_df.empty:
+                    continue
+                
+                # Try different column names for hybrid predictions (prefer hybrid_predicted)
+                pred_col = None
+                for col_name in ["hybrid_predicted", "predicted", "yhat"]:
+                    if col_name in pred_df.columns:
+                        pred_col = col_name
+                        break
+                
+                if pred_col is None:
+                    continue
+
+                pred_df["timestamp"] = pd.to_datetime(pred_df["timestamp"])
+                preds = pred_df[pred_col].astype(float).values
+                
+                if len(preds) == 0:
+                    continue
+
+                # For forecast_next: return last N predictions from test set
+                # This simulates forecasting from end of input data
+                if horizon <= len(preds):
+                    return [max(0.0, float(v)) for v in preds[-horizon:]]
+
+                # If horizon longer than available, use heuristic extrapolation
+                return None
+                
+            except Exception as e:
+                print(f"Failed to load Hybrid predictions CSV: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
+
+    return None
+
+
 def _predict_xgboost_from_csv(
     df: pd.DataFrame,
     horizon: int,
@@ -561,18 +620,55 @@ def forecast_next(
 
     try:
         if model_type == "hybrid":
+            # Use Prophet + LSTM hybrid approach
             model_path = _resolve_hybrid_model_path(timeframe, model_dir)
-            package, window_size = _load_hybrid_scaler_and_window()
-            scaler = None
-            if package is not None:
-                scaler = package.get("lstm_models", {}).get(timeframe, {}).get("scaler")
-            if model_path:
+            
+            # Try to load Prophet model for baseline
+            prophet_model_path = os.path.join(model_dir, f"prophet_{timeframe}_model.pkl")
+            prophet_baseline = None
+            
+            if os.path.exists(prophet_model_path):
+                try:
+                    import pickle
+                    with open(prophet_model_path, "rb") as f:
+                        prophet_model = pickle.load(f)
+                    
+                    # Create future dataframe for Prophet
+                    future_df = prophet_model.make_future_dataframe(periods=forecast_horizon, freq=step, include_history=False)
+                    prophet_forecast = prophet_model.predict(future_df)
+                    prophet_baseline = prophet_forecast["yhat"].values[-forecast_horizon:]
+                except Exception as e:
+                    print(f"Could not use Prophet model for baseline: {e}")
+            
+            # If Prophet model not available, try using CSV
+            if prophet_baseline is None:
+                prophet_csv_path = os.path.join(model_dir, f"prophet_{timeframe}_all_predictions.csv")
+                if os.path.exists(prophet_csv_path):
+                    try:
+                        prophet_df = pd.read_csv(prophet_csv_path)
+                        if "split" in prophet_df.columns:
+                            prophet_df = prophet_df[prophet_df["split"] == "test"].copy()
+                        
+                        if "predicted" in prophet_df.columns and not prophet_df.empty:
+                            prophet_preds = prophet_df["predicted"].astype(float).values
+                            if len(prophet_preds) >= forecast_horizon:
+                                prophet_baseline = prophet_preds[-forecast_horizon:]
+                    except Exception as e:
+                        print(f"Could not load Prophet baseline from CSV: {e}")
+            
+            # Get LSTM residual corrections
+            if model_path and prophet_baseline is not None:
                 model = load_lstm_model(model_path)
                 if model is not None:
+                    package, window_size = _load_hybrid_scaler_and_window()
+                    scaler = None
+                    if package is not None:
+                        scaler = package.get("lstm_models", {}).get(timeframe, {}).get("scaler")
+                    
                     residuals = _predict_hybrid(model, df, forecast_horizon, scaler, window_size)
                     if residuals is not None:
-                        baseline = _heuristic_forecast(df, forecast_horizon)
-                        yhat = [max(0.0, float(b) + float(r)) for b, r in zip(baseline, residuals)]
+                        # Combine Prophet baseline with LSTM residuals
+                        yhat = [max(0.0, float(b) + float(r)) for b, r in zip(prophet_baseline, residuals)]
                         status = f"hybrid_{timeframe}"
         elif model_type == "lstm":
             model_filename = f"{model_type}_{timeframe}_best.keras"
