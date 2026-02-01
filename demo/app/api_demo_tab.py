@@ -5,9 +5,18 @@ from datetime import datetime, timedelta
 import altair as alt
 
 
+@st.cache_data
+def load_sample_data(filename="data/train_5m_autoscaling.csv"):
+    """Load and cache sample data"""
+    df = pd.read_csv(filename)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df = df.rename(columns={'timestamp': 'ds', 'requests_count': 'y'})
+    return df
+
+
 def render_api_demo_tab():
     
-    st.header("🔌 API Demo - Dự đoán qua REST API")
+    st.header("API Demo - Dự đoán qua REST API")
     
     # API configuration
     col1, col2 = st.columns([2, 1])
@@ -49,9 +58,7 @@ def render_api_demo_tab():
         )
         
         try:
-            sample_file = "data/train_5m_autoscaling.csv"
-            df_full = pd.read_csv(sample_file)
-            df_full['ds'] = pd.to_datetime(df_full['ds'])
+            df_full = load_sample_data()
             
             if sample_option == "5 phút gần nhất":
                 df_input = df_full.tail(1)
@@ -226,7 +233,7 @@ def render_api_demo_tab():
                                 st.altair_chart(chart, use_container_width=True)
                                 
                                 if 'yhat_lower' in predictions.columns and 'yhat_upper' in predictions.columns:
-                                    st.caption("📊 Khoảng tin cậy được hiển thị trong bảng dữ liệu")
+                                    st.caption("Khoảng tin cậy được hiển thị trong bảng dữ liệu")
                             
                             with tab2:
                                 st.subheader("Dữ liệu dự đoán chi tiết")
@@ -242,7 +249,7 @@ def render_api_demo_tab():
                                 
                                 csv = display_df.to_csv(index=False)
                                 st.download_button(
-                                    label="📥 Tải xuống CSV",
+                                    label="Tải xuống CSV",
                                     data=csv,
                                     file_name=f"predictions_{model_type}_{timeframe}.csv",
                                     mime="text/csv"
@@ -272,7 +279,7 @@ def render_api_demo_tab():
                     st.exception(e)
         
         st.divider()
-        st.subheader("📊 Metrics API Demo")
+        st.subheader("Metrics API Demo")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -288,7 +295,7 @@ def render_api_demo_tab():
                 key="metrics_timeframe"
             )
         
-        if st.button("📈 Lấy Metrics", use_container_width=True):
+        if st.button("Lấy Metrics", use_container_width=True):
             with st.spinner("⏳ Đang tải metrics..."):
                 try:
                     response = requests.get(
@@ -376,8 +383,5 @@ def render_api_demo_tab():
         print(result['predictions'])
         ```
         
-        ### Xem thêm:
-        - 📚 Swagger UI: http://localhost:8000/docs
-        - 📄 ReDoc: http://localhost:8000/redoc
-        - 📖 README_API.md cho hướng dẫn chi tiết
+    
         """)

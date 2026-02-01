@@ -1,8 +1,21 @@
+# Core dependencies
 streamlit
 pandas
+numpy
+scikit-learn
+
+# Visualization
 altair
 plotly
+
+# ML models
 tensorflow
-numpy
 xgboost
-scikit-learn
+lightgbm
+prophet
+
+# REST API
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+python-multipart==0.0.6

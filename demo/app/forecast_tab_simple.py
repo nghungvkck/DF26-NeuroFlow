@@ -1,3 +1,6 @@
+"""
+Forecast tab: Load test data (future) and show Actual vs Predicted
+"""
 import os
 import pandas as pd
 import numpy as np
@@ -5,8 +8,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 
-def render_forecast_tab(df, forecast_next, model_dir, project_root):
-    # Forecast visualization - Load test data and show Actual vs Predicted
+def render_forecast_tab(df, forecast_next, model_dir):
+    """
+    Forecast visualization: Load test data (future) and show Actual vs Predicted
+    """
     st.subheader("📈 Forecast: Actual vs Predicted (Test Set = Future)")
     
     # Controls
@@ -20,7 +25,7 @@ def render_forecast_tab(df, forecast_next, model_dir, project_root):
     
     # Load test data and predictions
     try:
-        # Load test data
+        # Load test data (giả định là tương lai)
         data_dir = os.path.join(model_dir, "..", "data")
         test_file = f"test_{timeframe}_autoscaling.csv"
         test_path = os.path.join(data_dir, test_file)
@@ -68,34 +73,7 @@ def render_forecast_tab(df, forecast_next, model_dir, project_root):
                     predictions = pred_df['predicted'].values
                     status = f"hybrid_{timeframe}"
             else:
-                # Try to construct hybrid from Prophet + LSTM residuals (project root)
-                prophet_file = os.path.join(project_root, f"prophet_{timeframe}_all_predictions.csv")
-                lstm_file = os.path.join(project_root, f"lstm_{timeframe}_residual_predictions.csv")
-                
-                if os.path.exists(prophet_file) and os.path.exists(lstm_file):
-                    try:
-                        prophet_df = pd.read_csv(prophet_file)
-                        lstm_df = pd.read_csv(lstm_file)
-                        
-                        # Filter test split
-                        prophet_test = prophet_df[prophet_df['split'] == 'test'].copy()
-                        lstm_test = lstm_df[lstm_df['split'] == 'test'].copy()
-                        
-                        # Combine: hybrid = prophet_baseline + lstm_residual
-                        if len(prophet_test) > 0 and len(lstm_test) > 0:
-                            min_len_hybrid = min(len(prophet_test), len(lstm_test))
-                            prophet_baseline = prophet_test['predicted'].values[:min_len_hybrid]
-                            lstm_residual = lstm_test['residual_predicted'].values[:min_len_hybrid]
-                            predictions = prophet_baseline + lstm_residual
-                            
-                            # Use test_df from prophet (has timestamp and actual)
-                            test_df = prophet_test.iloc[:min_len_hybrid].copy()
-                            test_df = test_df.rename(columns={'actual': 'requests_count'})
-                            test_df['timestamp'] = pd.to_datetime(test_df['timestamp'])
-                            
-                            status = f"hybrid_composed_{timeframe}"
-                    except Exception as e:
-                        st.warning(f"Failed to compose hybrid predictions: {e}")
+                st.warning("Hybrid predictions not found in demo/models. Add demo/models/hybrid_*_predictions.csv to enable this view.")
         
         
         if predictions is None:
@@ -183,8 +161,7 @@ def render_forecast_tab(df, forecast_next, model_dir, project_root):
         mae = np.mean(np.abs(actual_values - predictions))
         rmse = np.sqrt(np.mean((actual_values - predictions) ** 2))
         
-        # sMAPE (Symmetric Mean Absolute Percentage Error) - better than MAPE
-        # sMAPE = 100 * mean(|actual - predicted| / ((|actual| + |predicted|) / 2))
+        # sMAPE (Symmetric Mean Absolute Percentage Error) 
         denominator = (np.abs(actual_values) + np.abs(predictions)) / 2
         smape = np.mean(np.abs(actual_values - predictions) / (denominator + 1e-6)) * 100
         

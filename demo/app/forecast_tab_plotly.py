@@ -1,3 +1,6 @@
+"""
+Enhanced Forecast Tab with Plotly visualization, hysteresis logic, and autoscaling recommendations
+"""
 import os
 import numpy as np
 import pandas as pd
@@ -6,7 +9,10 @@ import streamlit as st
 
 
 def calculate_hysteresis_action(predictions: np.ndarray, upper_threshold: float, lower_threshold: float, window: int = 3) -> tuple[str, str]:
-    # Calculate hysteresis action
+    """
+    Calculate scaling action with hysteresis to avoid flapping.
+    Only recommend scale if threshold is breached consistently.
+    """
     if len(predictions) < window:
         window = len(predictions)
     
@@ -30,8 +36,10 @@ def calculate_hysteresis_action(predictions: np.ndarray, upper_threshold: float,
         return "hold", reason
 
 
-def render_forecast_tab_plotly(df, forecast_next, model_dir, project_root):
-    # Render forecast tab with Plotly visualization
+def render_forecast_tab_plotly(df, forecast_next, model_dir):
+    """
+    Render the enhanced forecast tab with Plotly visualization
+    """
     st.subheader("📈 Time-Series Forecast & Autoscaling")
     
     # Mode selector
@@ -39,7 +47,7 @@ def render_forecast_tab_plotly(df, forecast_next, model_dir, project_root):
     
     st.divider()
     
-    # Controls
+    # Controls in two rows
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         timeframe = st.selectbox("Timeframe", ["1m", "5m", "15m"], key="timeframe", help="Data resolution")
@@ -111,7 +119,7 @@ def render_forecast_tab_plotly(df, forecast_next, model_dir, project_root):
             model_dir=model_dir
         )
         # Try to get LSTM RMSE from metrics
-        lstm_metrics_path = os.path.join(project_root, "lstm_metrics_summary.txt")
+        lstm_metrics_path = os.path.join(model_dir, "lstm_metrics_summary.txt")
         if os.path.exists(lstm_metrics_path):
             try:
                 with open(lstm_metrics_path, 'r') as f:

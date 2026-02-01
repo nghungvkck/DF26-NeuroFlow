@@ -124,7 +124,7 @@ async def predict(request: ForecastRequest):
         
         result_df, status_msg = forecast_next(
             df=df,
-            horizon=request.horizon,
+            forecast_horizon=request.horizon,
             model_type=request.model_type,
             timeframe=request.timeframe,
             model_dir=model_dir
@@ -303,7 +303,7 @@ async def predict_from_csv(
         df['ds'] = pd.to_datetime(df['ds'])
         result_df, status_msg = forecast_next(
             df=df,
-            horizon=horizon,
+            forecast_horizon=horizon,
             model_type=model_type,
             timeframe=timeframe,
             model_dir=MODEL_DIR

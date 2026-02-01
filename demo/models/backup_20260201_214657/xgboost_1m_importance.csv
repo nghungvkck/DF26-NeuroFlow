@@ -1,0 +1,14 @@
+feature,importance
+rolling_mean_5m,0.41616514
+rolling_mean_1h,0.3889485
+is_burst,0.05060348
+is_event,0.028219681
+lag_requests_1h,0.02108797
+hour_cos,0.01696782
+burst_ratio,0.016506713
+day_of_week,0.013129083
+hour_of_day,0.012365105
+hour_sin,0.010673409
+rolling_std_1h,0.010395103
+rolling_std_5m,0.008155146
+lag_requests_1d,0.0067827962

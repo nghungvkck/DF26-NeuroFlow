@@ -13,15 +13,17 @@ import streamlit as st
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(os.path.dirname(__file__))
 
-from utils.forecast import forecast_next, discover_models
+from utils.forecast import forecast_next, discover_models, load_model_metrics
 from utils.load_data import load_traffic_data
 from utils.scaling import decide_scaling
 from forecast_tab_simple import render_forecast_tab
+from api_demo_tab import render_api_demo_tab
 
 
 
 st.set_page_config(page_title="DataFlow Autoscaling Demo", layout="wide", initial_sidebar_state="collapsed")
 
+# Custom CSS for dark theme
 st.markdown("""
 <style>
     .stApp {
@@ -60,22 +62,28 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 DataFlow Autoscaling Dashboard")
+st.title("DataFlow Autoscaling Dashboard")
 
 data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
 model_dir = os.path.join(os.path.dirname(__file__), "..", "models")
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def _calculate_hysteresis_action(predictions: np.ndarray, upper_threshold: float, lower_threshold: float, window: int = 3) -> tuple[str, str]:
-    # Calculate hysteresis action
+    """
+    Calculate scaling action with hysteresis to avoid flapping.
+    Only recommend scale if threshold is breached consistently.
+    """
     if len(predictions) < window:
         window = len(predictions)
     
     recent_predictions = predictions[:window]
+    
+    # Count how many predictions exceed thresholds
     exceed_upper = np.sum(recent_predictions > upper_threshold)
     exceed_lower = np.sum(recent_predictions < lower_threshold)
-    threshold_count = int(np.ceil(window * 0.6))
+    
+    # Require majority of window to exceed threshold
+    threshold_count = int(np.ceil(window * 0.6))  # 60% of window
     
     if exceed_upper >= threshold_count:
         reason = f"🔺 {exceed_upper}/{window} predictions exceed upper threshold ({upper_threshold:.0f})"
@@ -88,43 +96,12 @@ def _calculate_hysteresis_action(predictions: np.ndarray, upper_threshold: float
         return "hold", reason
 
 
-def _load_xgboost_metrics(timeframe: str) -> tuple[dict[str, float], str] | None:
-    candidates = [
-        os.path.join(project_root, f"xgboost_{timeframe}_predictions.csv"),
-        os.path.join(project_root, "xgboost_test_predictions.csv"),
-    ]
-
-    for path in candidates:
-        if not os.path.exists(path):
-            continue
-        try:
-            pred_df = pd.read_csv(path)
-            if "actual" not in pred_df.columns or "predicted" not in pred_df.columns:
-                continue
-            actual = pred_df["actual"].astype(float).values
-            predicted = pred_df["predicted"].astype(float).values
-            if len(actual) == 0:
-                continue
-            mae = float(np.mean(np.abs(actual - predicted)))
-            rmse = float(np.sqrt(np.mean((actual - predicted) ** 2)))
-            if "error_pct" in pred_df.columns:
-                mape = float(np.mean(pred_df["error_pct"].astype(float).values))
-            elif "error_percent" in pred_df.columns:
-                mape = float(np.mean(pred_df["error_percent"].astype(float).values))
-            else:
-                mape = float(np.mean(np.abs((actual - predicted) / (np.abs(actual) + 1e-6)))) * 100
-            return {"mae": mae, "rmse": rmse, "mape": mape}, os.path.basename(path)
-        except Exception:
-            continue
-
-    return None
-
 data_files = sorted([f for f in os.listdir(data_dir) if f.endswith(".csv")])
 selected_file = st.selectbox("Dataset", data_files, key="dataset_selector")
 
 df = load_traffic_data(selected_file, data_dir=data_dir)
 
-tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Forecast", "Autoscaling", "Cost Analysis"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Forecast", "Autoscaling", "Cost Analysis", "API Demo"])
 
 with tab1:
     st.subheader("Overview")
@@ -173,7 +150,7 @@ with tab1:
 
 with tab2:
     # Simple forecast tab with Actual vs Predicted
-    render_forecast_tab(df, forecast_next, model_dir, project_root)
+    render_forecast_tab(df, forecast_next, model_dir)
 
 with tab3:
     st.subheader("Autoscaling Decision")
@@ -267,3 +244,6 @@ with tab4:
         as_=["variable", "value"]
     )
     st.altair_chart(cost_chart, use_container_width=True)
+
+with tab5:
+    render_api_demo_tab()
