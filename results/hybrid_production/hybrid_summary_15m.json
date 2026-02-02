@@ -1,0 +1,22 @@
+{
+  "strategy": "HYBRID",
+  "timeframe": "15m",
+  "total_steps": 908,
+  "total_cost": 13.620000000000005,
+  "cost_breakdown": {
+    "reserved": 13.620000000000005,
+    "spot": 0.0,
+    "on_demand": 0.0
+  },
+  "sla_violations": 0,
+  "slo_violations": 0,
+  "scaling_events": 0,
+  "scale_up_events": 0,
+  "scale_down_events": 0,
+  "avg_pods": 2.0,
+  "min_pods": 2,
+  "max_pods": 2,
+  "avg_cpu": 0.06137081497797357,
+  "max_cpu": 0.164,
+  "forecast_mape": 16.991072482488015
+}

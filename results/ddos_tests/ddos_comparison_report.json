@@ -1,0 +1,152 @@
+{
+  "NORMAL": {
+    "REACTIVE": {
+      "total_cost": 6.816666666666667,
+      "sla_violations": 0,
+      "scaling_events": 77,
+      "spike_response_time": 2.0,
+      "avg_pods": 0
+    },
+    "PREDICTIVE": {
+      "total_cost": 6.0,
+      "sla_violations": 0,
+      "scaling_events": 2,
+      "spike_response_time": 0.0,
+      "avg_pods": 0
+    },
+    "CPU_BASED": {
+      "total_cost": 17.2125,
+      "sla_violations": 0,
+      "scaling_events": 54,
+      "spike_response_time": 9.421052631578947,
+      "avg_pods": 0
+    },
+    "HYBRID": {
+      "total_cost": 13.7625,
+      "sla_violations": 0,
+      "scaling_events": 141,
+      "spike_response_time": 6.461538461538462,
+      "avg_pods": 0
+    }
+  },
+  "SUDDEN_SPIKE": {
+    "REACTIVE": {
+      "total_cost": 6.862500000000001,
+      "sla_violations": 2,
+      "scaling_events": 77,
+      "spike_response_time": 13.071428571428571,
+      "avg_pods": 0
+    },
+    "PREDICTIVE": {
+      "total_cost": 6.0,
+      "sla_violations": 4,
+      "scaling_events": 2,
+      "spike_response_time": 0.0,
+      "avg_pods": 0
+    },
+    "CPU_BASED": {
+      "total_cost": 17.954166666666666,
+      "sla_violations": 0,
+      "scaling_events": 54,
+      "spike_response_time": 10.13888888888889,
+      "avg_pods": 0
+    },
+    "HYBRID": {
+      "total_cost": 11.850000000000001,
+      "sla_violations": 1,
+      "scaling_events": 141,
+      "spike_response_time": 5.333333333333333,
+      "avg_pods": 0
+    }
+  },
+  "GRADUAL_SPIKE": {
+    "REACTIVE": {
+      "total_cost": 6.970833333333333,
+      "sla_violations": 0,
+      "scaling_events": 68,
+      "spike_response_time": 5.25,
+      "avg_pods": 0
+    },
+    "PREDICTIVE": {
+      "total_cost": 6.0,
+      "sla_violations": 0,
+      "scaling_events": 2,
+      "spike_response_time": 0.0,
+      "avg_pods": 0
+    },
+    "CPU_BASED": {
+      "total_cost": 21.670833333333334,
+      "sla_violations": 0,
+      "scaling_events": 54,
+      "spike_response_time": 8.294117647058824,
+      "avg_pods": 0
+    },
+    "HYBRID": {
+      "total_cost": 13.775,
+      "sla_violations": 0,
+      "scaling_events": 140,
+      "spike_response_time": 4.796296296296297,
+      "avg_pods": 0
+    }
+  },
+  "OSCILLATING_SPIKE": {
+    "REACTIVE": {
+      "total_cost": 7.300000000000001,
+      "sla_violations": 22,
+      "scaling_events": 85,
+      "spike_response_time": 9.75,
+      "avg_pods": 0
+    },
+    "PREDICTIVE": {
+      "total_cost": 6.945833333333334,
+      "sla_violations": 22,
+      "scaling_events": 10,
+      "spike_response_time": 12.0,
+      "avg_pods": 0
+    },
+    "CPU_BASED": {
+      "total_cost": 19.7125,
+      "sla_violations": 0,
+      "scaling_events": 53,
+      "spike_response_time": 9.35,
+      "avg_pods": 0
+    },
+    "HYBRID": {
+      "total_cost": 19.1875,
+      "sla_violations": 8,
+      "scaling_events": 145,
+      "spike_response_time": 4.732394366197183,
+      "avg_pods": 0
+    }
+  },
+  "SUSTAINED_DDOS": {
+    "REACTIVE": {
+      "total_cost": 7.041666666666666,
+      "sla_violations": 0,
+      "scaling_events": 67,
+      "spike_response_time": 7.5,
+      "avg_pods": 0
+    },
+    "PREDICTIVE": {
+      "total_cost": 6.0,
+      "sla_violations": 0,
+      "scaling_events": 2,
+      "spike_response_time": 0.0,
+      "avg_pods": 0
+    },
+    "CPU_BASED": {
+      "total_cost": 22.65,
+      "sla_violations": 0,
+      "scaling_events": 61,
+      "spike_response_time": 7.27027027027027,
+      "avg_pods": 0
+    },
+    "HYBRID": {
+      "total_cost": 13.675,
+      "sla_violations": 0,
+      "scaling_events": 140,
+      "spike_response_time": 5.526315789473684,
+      "avg_pods": 0
+    }
+  }
+}

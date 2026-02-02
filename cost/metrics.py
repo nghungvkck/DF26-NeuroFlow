@@ -1,330 +1,185 @@
 """
-COMPREHENSIVE METRICS MODULE
-=============================
-Tracks and aggregates cost, performance, and stability metrics.
+COST & PERFORMANCE METRICS
+===========================
+Simplified metrics module focused on CloudCostModel integration.
 
-Metrics computed:
-1. COST METRICS: Total cost, average pods, overprovision ratio
-2. PERFORMANCE METRICS: SLA violation rate, mean response delay
-3. STABILITY METRICS: Number of scaling events, oscillation count
-4. KUBERNETES HPA METRICS: Resource utilization, target tracking
-5. AWS AUTO SCALING METRICS: Warm-up time, cooldown effectiveness
-6. GOOGLE BORG METRICS: Priority enforcement, resource efficiency
+Metrics tracked:
+1. COST METRICS: Total cost (reserved/spot/on-demand), average pods, efficiency
+2. SLA/SLO METRICS: Violation count and rates
+3. SCALING METRICS: Events, direction, oscillations
+4. UTILIZATION METRICS: CPU, pod efficiency
+
+Integrated with CloudCostModel (3-tier: reserved + spot/on-demand)
+Validates cost calculation against autoscaler decisions
 """
 
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Optional
 
 
 @dataclass
 class MetricsSnapshot:
-    """Single timestep metrics snapshot."""
+    """Single timestep metrics - aligned with CloudCostModel."""
     timestamp: int
     pods: int
     requests: float
-    cost_accumulated: float
-    sla_violated: bool
-    sla_violated_before_scaling: bool  # NEW: SLA violation BEFORE scaling decision
-    scaling_action: int  # -1, 0, +1
-    
-    # Kubernetes HPA metrics
-    cpu_utilization: Optional[float] = None  # CPU utilization percentage (0-1)
-    memory_utilization: Optional[float] = None  # Memory utilization (0-1)
-    custom_metric_value: Optional[float] = None  # Custom metric (e.g., queue depth)
-    
-    # AWS Auto Scaling metrics
-    warm_up_active: bool = False  # Instance warming up (grace period)
-    cooldown_active: bool = False  # Cooldown period active
-    target_tracking_breach: bool = False  # Target metric breached
-    
-    # Google Borg metrics
-    priority_preemptions: int = 0  # Low priority pods preempted
-    resource_quota_breach: bool = False  # Quota exceeded
+    cost: float  # Step cost (reserved + spot/on-demand)
+    cost_breakdown: Dict[str, float]  # {reserved, spot, on_demand}
+    cpu_utilization: float  # Computed: requests / (pods * capacity)
+    sla_violated: bool  # CPU > 0.95 (SLA threshold)
+    slo_violated: bool  # CPU > 0.85 (SLO threshold)
+    scaling_action: int  # -1 (scale-in), 0 (no-op), +1 (scale-out)
 
 
 class MetricsCollector:
-    """Collects and aggregates metrics throughout simulation."""
+    """Collects metrics aligned with CloudCostModel."""
     
-    def __init__(self, capacity_per_pod, cost_per_pod_per_hour, step_minutes=5.0,
-                 enable_k8s_metrics=True, enable_aws_metrics=True, enable_borg_metrics=False):
-        self.capacity = capacity_per_pod
-        self.cost_per_hour = cost_per_pod_per_hour
-        self.step_minutes = step_minutes
-        self.step_hours = step_minutes / 60.0
-        
-        # Feature flags for different metric systems
-        self.enable_k8s_metrics = enable_k8s_metrics
-        self.enable_aws_metrics = enable_aws_metrics
-        self.enable_borg_metrics = enable_borg_metrics
-        
-        # Kubernetes HPA state
-        self.target_cpu_utilization = 0.7  # Default HPA target: 70%
-        self.target_memory_utilization = 0.8
-        
-        # AWS Auto Scaling state
-        self.warm_up_time = 300 / step_minutes  # 5 min warm-up (in timesteps)
-        self.cooldown_time = 300 / step_minutes  # 5 min cooldown
-        self.last_scale_out_time = -999
-        self.last_scale_in_time = -999
-        
-        # Google Borg state
-        self.resource_quota = 100  # Max pods allowed
-        self.preemption_count = 0
-        
-        self.snapshots: List[MetricsSnapshot] = []
-    
-    def record(self, t, pods, requests, scaling_action, sla_before_scaling=False,
-               cpu_utilization=None, memory_utilization=None, custom_metric=None):
+    def __init__(self, capacity_per_pod: int, step_minutes: float = 15.0):
         """
-        Record timestep metrics.
+        Initialize metrics collector.
         
         Args:
-            t: timestep
-            pods: pod count AFTER scaling decision
-            requests: actual request count
-            scaling_action: scaling decision (-1, 0, +1)
-            sla_before_scaling: whether SLA was violated BEFORE scaling (important!)
-            cpu_utilization: Optional CPU utilization (Kubernetes HPA)
-            memory_utilization: Optional memory utilization (Kubernetes HPA)
-            custom_metric: Optional custom metric value (Kubernetes HPA)
+            capacity_per_pod: Requests per pod per minute
+            step_minutes: Timestep duration (typically 15 for production)
         """
-        # Compute cost for this timestep (based on post-scaling pod count)
-        step_cost = pods * self.cost_per_hour * self.step_hours
+        self.capacity = capacity_per_pod
+        self.step_minutes = step_minutes
+        self.snapshots: List[MetricsSnapshot] = []
+    
+    def record(self, t: int, pods: int, requests: float, cost: float, 
+               cost_breakdown: Dict[str, float], scaling_action: int = 0):
+        """
+        Record single timestep metrics.
         
-        # Accumulated cost
-        accumulated = (self.snapshots[-1].cost_accumulated if self.snapshots else 0) + step_cost
+        Args:
+            t: Timestep number
+            pods: Pod count after scaling
+            requests: Request count
+            cost: Step cost (from CloudCostModel.compute_step_cost)
+            cost_breakdown: Cost breakdown {reserved, spot, on_demand}
+            scaling_action: -1 (scale-in), 0 (no-op), +1 (scale-out)
+        """
+        # Compute utilization
+        cpu = requests / (pods * self.capacity) if pods > 0 else 0.0
         
-        # SLA check: requests > capacity? (after scaling)
-        sla_violated_after = requests > (pods * self.capacity)
-        
-        # Kubernetes HPA metrics
-        k8s_cpu = cpu_utilization if cpu_utilization is not None else (requests / (pods * self.capacity) if pods > 0 else 0)
-        k8s_memory = memory_utilization
-        k8s_custom = custom_metric
-        
-        # AWS Auto Scaling metrics
-        aws_warm_up = False
-        aws_cooldown = False
-        if self.enable_aws_metrics:
-            if scaling_action > 0:
-                self.last_scale_out_time = t
-                aws_warm_up = True
-            elif scaling_action < 0:
-                self.last_scale_in_time = t
-            
-            # Check if still in warm-up from previous scale-out
-            if t - self.last_scale_out_time <= self.warm_up_time:
-                aws_warm_up = True
-            
-            # Check if in cooldown period
-            if t - self.last_scale_out_time <= self.cooldown_time or t - self.last_scale_in_time <= self.cooldown_time:
-                aws_cooldown = True
-        
-        aws_target_breach = k8s_cpu > self.target_cpu_utilization if k8s_cpu is not None else False
-        
-        # Google Borg metrics
-        borg_preemptions = 0
-        borg_quota_breach = False
-        if self.enable_borg_metrics:
-            if scaling_action < 0 and pods < self.resource_quota * 0.5:
-                # Simulate preemption of low-priority pods
-                borg_preemptions = abs(scaling_action)
-                self.preemption_count += borg_preemptions
-            
-            if pods > self.resource_quota:
-                borg_quota_breach = True
+        # Check SLA/SLO (standard cloud metrics)
+        sla_violated = cpu > 0.95  # SLA: CPU must be < 95%
+        slo_violated = cpu > 0.85  # SLO: Target < 85%
         
         snapshot = MetricsSnapshot(
             timestamp=t,
             pods=pods,
             requests=requests,
-            cost_accumulated=accumulated,
-            sla_violated=sla_violated_after,
-            sla_violated_before_scaling=sla_before_scaling,
-            scaling_action=scaling_action,
-            cpu_utilization=k8s_cpu,
-            memory_utilization=k8s_memory,
-            custom_metric_value=k8s_custom,
-            warm_up_active=aws_warm_up,
-            cooldown_active=aws_cooldown,
-            target_tracking_breach=aws_target_breach,
-            priority_preemptions=borg_preemptions,
-            resource_quota_breach=borg_quota_breach
+            cost=cost,
+            cost_breakdown=cost_breakdown,
+            cpu_utilization=cpu,
+            sla_violated=sla_violated,
+            slo_violated=slo_violated,
+            scaling_action=scaling_action
         )
         self.snapshots.append(snapshot)
     
     def compute_aggregate_metrics(self) -> Dict[str, float]:
-        """Compute all aggregate metrics."""
-        if len(self.snapshots) == 0:
+        """Compute aggregate metrics from all snapshots."""
+        if not self.snapshots:
             return {}
         
         snapshots = self.snapshots
         
-        # ==================== COST METRICS ====================
-        total_cost = snapshots[-1].cost_accumulated
+        # ========== COST METRICS ==========
+        total_cost = sum(s.cost for s in snapshots)
+        
+        # Cost breakdown by instance type
+        cost_reserved = sum(s.cost_breakdown.get('reserved', 0) for s in snapshots)
+        cost_spot = sum(s.cost_breakdown.get('spot', 0) for s in snapshots)
+        cost_ondemand = sum(s.cost_breakdown.get('on_demand', 0) for s in snapshots)
+        
         avg_pods = np.mean([s.pods for s in snapshots])
+        min_pods = np.min([s.pods for s in snapshots])
+        max_pods = np.max([s.pods for s in snapshots])
         
-        # Overprovision ratio: how much extra capacity was idle
-        capacities = np.array([s.pods * self.capacity for s in snapshots])
-        requests = np.array([s.requests for s in snapshots])
-        overprovision_ratio = np.mean((capacities - requests) / np.maximum(capacities, 1))
+        # Cost efficiency: cost per pod per timestep
+        cost_per_pod = total_cost / sum(s.pods for s in snapshots) if sum(s.pods for s in snapshots) > 0 else 0
         
-        # ==================== PERFORMANCE METRICS ====================
-        # Count SLA violations BEFORE scaling (when demand exceeded current capacity)
-        sla_violations = np.sum([int(s.sla_violated_before_scaling) for s in snapshots])
-        sla_violation_rate = sla_violations / len(snapshots) if len(snapshots) > 0 else 0
+        # ========== SLA/SLO METRICS ==========
+        sla_violations = sum(1 for s in snapshots if s.sla_violated)
+        slo_violations = sum(1 for s in snapshots if s.slo_violated)
         
-        # Reaction time: delay between SLA breach and scale response
-        reaction_delays = []
-        for i in range(1, len(snapshots)):
-            if snapshots[i-1].sla_violated_before_scaling and snapshots[i].scaling_action > 0:
-                reaction_delays.append(1)  # Immediate response
-            elif not snapshots[i-1].sla_violated_before_scaling and snapshots[i].sla_violated_before_scaling:
-                reaction_delays.append(0)  # Just breached
+        sla_violation_rate = sla_violations / len(snapshots)
+        slo_violation_rate = slo_violations / len(snapshots)
         
-        mean_reaction_delay = np.mean(reaction_delays) if reaction_delays else 0
-        
-        # ==================== STABILITY METRICS ====================
+        # ========== SCALING METRICS ==========
         actions = np.array([s.scaling_action for s in snapshots])
         
-        # Total scaling events (non-zero actions)
         scaling_events = np.sum(actions != 0)
+        scale_ups = np.sum(actions > 0)
+        scale_downs = np.sum(actions < 0)
         
-        # Oscillation count: alternating scale-up/down (flapping)
-        oscillations = 0
-        for i in range(1, len(actions)):
-            if actions[i] * actions[i-1] < 0:  # Sign change = flapping
-                oscillations += 1
+        # Oscillation: rapid scale-up/down cycles (flapping)
+        oscillations = sum(1 for i in range(1, len(actions)) 
+                          if actions[i] * actions[i-1] < 0)
         
-        # Scale-out ratio: how often we scale out vs scale in
-        scale_outs = np.sum(actions > 0)
-        scale_ins = np.sum(actions < 0)
-        scale_out_ratio = scale_outs / max(scale_outs + scale_ins, 1)
+        # ========== UTILIZATION METRICS ==========
+        utils = np.array([s.cpu_utilization for s in snapshots])
         
-        # ==================== UTILIZATION METRICS ====================
-        utilizations = requests / np.maximum(capacities, 1)
-        mean_utilization = np.mean(utilizations)
-        max_utilization = np.max(utilizations)
-        min_utilization = np.min(utilizations)
+        avg_cpu = np.mean(utils)
+        max_cpu = np.max(utils)
+        min_cpu = np.min(utils)
         
-        # ==================== KUBERNETES HPA METRICS ====================
-        k8s_metrics = {}
-        if self.enable_k8s_metrics:
-            cpu_utils = [s.cpu_utilization for s in snapshots if s.cpu_utilization is not None]
-            if cpu_utils:
-                k8s_metrics['k8s_avg_cpu_utilization'] = float(np.mean(cpu_utils))
-                k8s_metrics['k8s_max_cpu_utilization'] = float(np.max(cpu_utils))
-                k8s_metrics['k8s_cpu_target_breaches'] = int(np.sum(np.array(cpu_utils) > self.target_cpu_utilization))
-                k8s_metrics['k8s_cpu_target_breach_rate'] = float(k8s_metrics['k8s_cpu_target_breaches'] / len(cpu_utils))
-            
-            # HPA effectiveness: How often HPA would trigger scaling
-            hpa_would_scale = 0
-            for s in snapshots:
-                if s.cpu_utilization is not None:
-                    if s.cpu_utilization > self.target_cpu_utilization * 1.1:  # 10% threshold
-                        hpa_would_scale += 1
-            k8s_metrics['k8s_hpa_trigger_rate'] = float(hpa_would_scale / len(snapshots))
+        # Efficiency: how well we utilized capacity (avoid over-provisioning)
+        efficiency = 1.0 - np.mean(np.maximum(0, 0.95 - utils))  # 0.95 is ideal
         
-        # ==================== AWS AUTO SCALING METRICS ====================
-        aws_metrics = {}
-        if self.enable_aws_metrics:
-            warm_up_time = np.sum([s.warm_up_active for s in snapshots])
-            cooldown_time = np.sum([s.cooldown_active for s in snapshots])
-            
-            aws_metrics['aws_warm_up_time_ratio'] = float(warm_up_time / len(snapshots))
-            aws_metrics['aws_cooldown_time_ratio'] = float(cooldown_time / len(snapshots))
-            aws_metrics['aws_target_tracking_breaches'] = int(np.sum([s.target_tracking_breach for s in snapshots]))
-            
-            # Cooldown effectiveness: Did cooldown prevent unnecessary scaling?
-            cooldown_effectiveness = 0
-            for i in range(1, len(snapshots)):
-                if snapshots[i].cooldown_active and snapshots[i].scaling_action == 0:
-                    cooldown_effectiveness += 1
-            aws_metrics['aws_cooldown_effectiveness'] = float(cooldown_effectiveness / max(cooldown_time, 1))
-        
-        # ==================== GOOGLE BORG METRICS ====================
-        borg_metrics = {}
-        if self.enable_borg_metrics:
-            total_preemptions = self.preemption_count
-            quota_breaches = np.sum([s.resource_quota_breach for s in snapshots])
-            
-            borg_metrics['borg_total_preemptions'] = int(total_preemptions)
-            borg_metrics['borg_quota_breaches'] = int(quota_breaches)
-            borg_metrics['borg_quota_breach_rate'] = float(quota_breaches / len(snapshots))
-            
-            # Resource efficiency (Borg's primary metric)
-            borg_metrics['borg_resource_efficiency'] = float(mean_utilization)
-        
-        # Combine all metrics
-        result = {
-            # Cost
+        # Return consolidated metrics
+        return {
+            # Cost metrics (primary)
             'total_cost': float(total_cost),
-            'average_pods': float(avg_pods),
-            'overprovision_ratio': float(overprovision_ratio),
-            'cost_per_timestep': float(total_cost / len(snapshots)) if len(snapshots) > 0 else 0,
+            'cost_reserved': float(cost_reserved),
+            'cost_spot': float(cost_spot),
+            'cost_ondemand': float(cost_ondemand),
+            'cost_per_pod': float(cost_per_pod),
             
-            # Performance
+            # Pod metrics
+            'avg_pods': float(avg_pods),
+            'min_pods': int(min_pods),
+            'max_pods': int(max_pods),
+            
+            # SLA/SLO metrics (performance)
             'sla_violations': int(sla_violations),
             'sla_violation_rate': float(sla_violation_rate),
-            'mean_reaction_delay': float(mean_reaction_delay),
+            'slo_violations': int(slo_violations),
+            'slo_violation_rate': float(slo_violation_rate),
             
-            # Stability
+            # Scaling metrics (stability)
             'scaling_events': int(scaling_events),
-            'oscillation_count': int(oscillations),
-            'scale_out_ratio': float(scale_out_ratio),
-            'scale_ups': int(scale_outs),
-            'scale_downs': int(scale_ins),
+            'scale_ups': int(scale_ups),
+            'scale_downs': int(scale_downs),
+            'oscillations': int(oscillations),
             
-            # Utilization
-            'mean_utilization': float(mean_utilization),
-            'max_utilization': float(max_utilization),
-            'min_utilization': float(min_utilization),
+            # Utilization metrics
+            'avg_cpu': float(avg_cpu),
+            'max_cpu': float(max_cpu),
+            'min_cpu': float(min_cpu),
+            'efficiency': float(efficiency),
             
-            # Summary
+            # Meta
             'total_timesteps': len(snapshots),
         }
-        
-        # Add platform-specific metrics
-        result.update(k8s_metrics)
-        result.update(aws_metrics)
-        result.update(borg_metrics)
-        
-        return result
 
 
-# Legacy functions (kept for backward compatibility)
+# ============================================================================
+# LEGACY FUNCTIONS (Backward Compatibility)
+# ============================================================================
 
 def sla_violation_rate(requests, servers, capacity):
     """
-    Legacy: Compute SLA violation rate.
+    DEPRECATED: Use MetricsCollector.compute_aggregate_metrics() instead.
     
-    DEPRECATED: Use MetricsCollector instead
+    Compute SLA violation rate.
     """
     violations = requests > (servers * capacity)
     return np.mean(violations)
 
-
-def overprovision_ratio(requests, servers, capacity):
-    """
-    Legacy: Compute overprovision ratio.
-    
-    DEPRECATED: Use MetricsCollector instead
-    """
-    over = (servers * capacity - requests) / np.maximum(servers * capacity, 1)
-    return np.mean(over)
-
-
-def speed_of_scale(overload_times, recovery_times):
-    """
-    Legacy: Compute mean recovery time.
-    
-    DEPRECATED: Use MetricsCollector instead
-    """
-    return np.mean(recovery_times - overload_times)
-
-
-# Utility functions
 
 def compare_strategies(results_dict: Dict[str, Dict[str, float]]) -> Dict:
     """
@@ -334,19 +189,27 @@ def compare_strategies(results_dict: Dict[str, Dict[str, float]]) -> Dict:
         results_dict: {strategy_name: metrics_dict, ...}
     
     Returns:
-        Comparison dataframe-like structure
+        Comparison structure with key metrics
+    
+    Example:
+        >>> results = {
+        ...     'HYBRID': {'total_cost': 57.79, 'sla_violations': 14, ...},
+        ...     'REACTIVE': {'total_cost': 59.47, 'sla_violations': 41, ...}
+        ... }
+        >>> compare_strategies(results)
     """
     comparison = {}
     
     for strategy_name, metrics in results_dict.items():
         comparison[strategy_name] = {
-            'Cost ($)': f"{metrics['total_cost']:.2f}",
-            'Avg Pods': f"{metrics['average_pods']:.1f}",
-            'SLA Violations': f"{metrics['sla_violations']} ({metrics['sla_violation_rate']:.1%})",
+            'Cost': f"${metrics['total_cost']:.2f}",
+            'Avg Pods': f"{metrics['avg_pods']:.1f}",
+            'SLA Violations': f"{metrics['sla_violations']}",
             'Scaling Events': f"{metrics['scaling_events']}",
-            'Oscillations': f"{metrics['oscillation_count']}",
-            'Mean Util.': f"{metrics['mean_utilization']:.1%}",
+            'Oscillations': f"{metrics['oscillations']}",
+            'Avg CPU': f"{metrics['avg_cpu']:.1%}",
         }
     
     return comparison
+
 

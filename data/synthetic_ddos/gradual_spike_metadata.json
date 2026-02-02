@@ -1,0 +1,21 @@
+{
+  "scenario_type": "GRADUAL_SPIKE",
+  "duration_minutes": 720,
+  "base_rate": 100.0,
+  "spikes": [
+    {
+      "type": "GRADUAL_SPIKE",
+      "start": 240,
+      "end": 390,
+      "ramp_duration": 60,
+      "peak_duration": 30,
+      "multiplier": 3.0
+    }
+  ],
+  "statistics": {
+    "mean_traffic": 73.30778747590662,
+    "max_traffic": 179.79059413664012,
+    "min_traffic": 0.0,
+    "std_traffic": 54.966226016813536
+  }
+}

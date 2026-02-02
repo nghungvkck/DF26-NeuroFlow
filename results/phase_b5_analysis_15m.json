@@ -1,0 +1,83 @@
+{
+  "timeframe": "15m",
+  "data_source": "predicted",
+  "num_predictions": 908,
+  "prediction_quality": {
+    "mean_error": -4.5830593775680315,
+    "mean_abs_error": 82.3991869143074,
+    "mean_error_pct": 16.643025334030117,
+    "std_error": 113.40228389187683
+  },
+  "strategy_performance": {
+    "REACTIVE": {
+      "total_cost": 44.37916666666667,
+      "avg_pods": 0,
+      "sla_violations": 22,
+      "scaling_events": 88,
+      "objective_value": 6644.379166666667
+    },
+    "PREDICTIVE": {
+      "total_cost": 31.158333333333335,
+      "avg_pods": 0,
+      "sla_violations": 27,
+      "scaling_events": 85,
+      "objective_value": 6981.158333333333
+    },
+    "CPU_BASED": {
+      "total_cost": 73.00416666666666,
+      "avg_pods": 0,
+      "sla_violations": 18,
+      "scaling_events": 134,
+      "objective_value": 8573.004166666666
+    },
+    "HYBRID": {
+      "total_cost": 57.791666666666664,
+      "avg_pods": 0,
+      "sla_violations": 14,
+      "scaling_events": 152,
+      "objective_value": 9057.791666666666
+    }
+  },
+  "strategy_ranking": [
+    [
+      "PREDICTIVE",
+      {
+        "total_cost": 31.158333333333335,
+        "avg_pods": 0,
+        "sla_violations": 27,
+        "scaling_events": 85,
+        "objective_value": 6981.158333333333
+      }
+    ],
+    [
+      "REACTIVE",
+      {
+        "total_cost": 44.37916666666667,
+        "avg_pods": 0,
+        "sla_violations": 22,
+        "scaling_events": 88,
+        "objective_value": 6644.379166666667
+      }
+    ],
+    [
+      "HYBRID",
+      {
+        "total_cost": 57.791666666666664,
+        "avg_pods": 0,
+        "sla_violations": 14,
+        "scaling_events": 152,
+        "objective_value": 9057.791666666666
+      }
+    ],
+    [
+      "CPU_BASED",
+      {
+        "total_cost": 73.00416666666666,
+        "avg_pods": 0,
+        "sla_violations": 18,
+        "scaling_events": 134,
+        "objective_value": 8573.004166666666
+      }
+    ]
+  ]
+}

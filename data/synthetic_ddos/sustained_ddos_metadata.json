@@ -1,0 +1,20 @@
+{
+  "scenario_type": "SUSTAINED_DDOS",
+  "duration_minutes": 720,
+  "base_rate": 100.0,
+  "spikes": [
+    {
+      "type": "SUSTAINED_DDOS",
+      "start": 180,
+      "end": 360,
+      "duration": 180,
+      "multiplier": 3.5
+    }
+  ],
+  "statistics": {
+    "mean_traffic": 81.93157536421346,
+    "max_traffic": 199.30249297206672,
+    "min_traffic": -0.0882796740793978,
+    "std_traffic": 56.68884999711902
+  }
+}

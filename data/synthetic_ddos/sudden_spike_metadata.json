@@ -1,0 +1,21 @@
+{
+  "scenario_type": "SUDDEN_SPIKE",
+  "duration_minutes": 720,
+  "base_rate": 100.0,
+  "spikes": [
+    {
+      "type": "SUDDEN_SPIKE",
+      "start": 240,
+      "end": 270,
+      "duration": 30,
+      "multiplier": 5.0,
+      "peak_traffic": 228.90843715277796
+    }
+  ],
+  "statistics": {
+    "mean_traffic": 66.94577430339191,
+    "max_traffic": 228.90843715277796,
+    "min_traffic": 0.0,
+    "std_traffic": 54.76207354915654
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "scenario_type": "OSCILLATING_SPIKE",
+  "duration_minutes": 720,
+  "base_rate": 100.0,
+  "spikes": [
+    {
+      "type": "OSCILLATING_SPIKE",
+      "spike_number": 1,
+      "start": 100,
+      "end": 115,
+      "multiplier": 4.0
+    },
+    {
+      "type": "OSCILLATING_SPIKE",
+      "spike_number": 2,
+      "start": 220,
+      "end": 235,
+      "multiplier": 4.0
+    },
+    {
+      "type": "OSCILLATING_SPIKE",
+      "spike_number": 3,
+      "start": 340,
+      "end": 355,
+      "multiplier": 4.0
+    },
+    {
+      "type": "OSCILLATING_SPIKE",
+      "spike_number": 4,
+      "start": 460,
+      "end": 475,
+      "multiplier": 4.0
+    },
+    {
+      "type": "OSCILLATING_SPIKE",
+      "spike_number": 5,
+      "start": 580,
+      "end": 595,
+      "multiplier": 4.0
+    }
+  ],
+  "statistics": {
+    "mean_traffic": 81.66573039256481,
+    "max_traffic": 620.1171904591822,
+    "min_traffic": 0.0,
+    "std_traffic": 94.95565711244463
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "selected_strategy": "HYBRID",
+  "performance_metrics": {
+    "cost_per_15m": 57.79,
+    "cost_per_hour": 6.109955947136563,
+    "sla_violations": 14,
+    "scaling_events": 152,
+    "spike_response_time": "4.7-5.5 minutes"
+  },
+  "layers": {
+    "layer_0_anomaly": {
+      "enabled": true,
+      "methods": [
+        "zscore",
+        "iqr",
+        "rate_of_change",
+        "ensemble"
+      ],
+      "ensemble_threshold": 2,
+      "scale_multiplier": 1.5,
+      "cooldown_minutes": 2.5
+    },
+    "layer_1_emergency": {
+      "enabled": true,
+      "cpu_threshold": 0.95,
+      "scale_multiplier": 1.5,
+      "cooldown_minutes": 2.5
+    },
+    "layer_2_predictive": {
+      "enabled": true,
+      "safety_margin": 0.8,
+      "threshold": 0.7,
+      "min_confidence": 0.85,
+      "scale_multiplier": 1.2,
+      "cooldown_minutes": 5.0
+    },
+    "layer_3_reactive": {
+      "enabled": true,
+      "scale_out_threshold": 0.7,
+      "scale_in_threshold": 0.3,
+      "scale_multiplier": 1.0,
+      "cooldown_minutes": 5.0
+    }
+  },
+  "cost_model": {
+    "unit_cost_per_pod_per_hour": 0.05,
+    "tracking_interval_minutes": 15,
+    "report_metrics": [
+      "hourly_cost",
+      "daily_cost",
+      "monthly_cost",
+      "cost_per_request"
+    ]
+  }
+}

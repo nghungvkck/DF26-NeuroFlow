@@ -1,0 +1,83 @@
+{
+  "timeframe": "5m",
+  "data_source": "predicted",
+  "num_predictions": 2724,
+  "prediction_quality": {
+    "mean_error": -1.8481819127549002,
+    "mean_abs_error": 34.49352462473942,
+    "mean_error_pct": 16073361.082233924,
+    "std_error": 46.020711047536125
+  },
+  "strategy_performance": {
+    "REACTIVE": {
+      "total_cost": 48.666666666666664,
+      "avg_pods": 0,
+      "sla_violations": 0,
+      "scaling_events": 100,
+      "objective_value": 5048.666666666667
+    },
+    "PREDICTIVE": {
+      "total_cost": 35.3125,
+      "avg_pods": 0,
+      "sla_violations": 44,
+      "scaling_events": 31,
+      "objective_value": 5985.3125
+    },
+    "CPU_BASED": {
+      "total_cost": 188.25,
+      "avg_pods": 0,
+      "sla_violations": 0,
+      "scaling_events": 205,
+      "objective_value": 10438.25
+    },
+    "HYBRID": {
+      "total_cost": 86.6,
+      "avg_pods": 0,
+      "sla_violations": 5,
+      "scaling_events": 454,
+      "objective_value": 23286.6
+    }
+  },
+  "strategy_ranking": [
+    [
+      "PREDICTIVE",
+      {
+        "total_cost": 35.3125,
+        "avg_pods": 0,
+        "sla_violations": 44,
+        "scaling_events": 31,
+        "objective_value": 5985.3125
+      }
+    ],
+    [
+      "REACTIVE",
+      {
+        "total_cost": 48.666666666666664,
+        "avg_pods": 0,
+        "sla_violations": 0,
+        "scaling_events": 100,
+        "objective_value": 5048.666666666667
+      }
+    ],
+    [
+      "HYBRID",
+      {
+        "total_cost": 86.6,
+        "avg_pods": 0,
+        "sla_violations": 5,
+        "scaling_events": 454,
+        "objective_value": 23286.6
+      }
+    ],
+    [
+      "CPU_BASED",
+      {
+        "total_cost": 188.25,
+        "avg_pods": 0,
+        "sla_violations": 0,
+        "scaling_events": 205,
+        "objective_value": 10438.25
+      }
+    ]
+  ]
+}

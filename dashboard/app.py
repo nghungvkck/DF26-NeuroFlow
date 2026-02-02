@@ -24,8 +24,9 @@ st.set_page_config(
 
 st.title("🚀 Autoscaling Pipeline Dashboard")
 st.markdown("""
-**PHASE A:** Model Evaluation - Real data forecast accuracy
-**PHASE B:** Autoscaling Tests - Synthetic scenario strategy testing
+**PHASE A:** Model Evaluation - Real data forecast accuracy  
+**PHASE B:** Autoscaling Tests - Synthetic scenario strategy testing  
+**PHASE B.5:** Autoscaling on Predicted Data - Test with LightGBM forecasts  
 **PHASE C:** Anomaly & Cost Analysis - Advanced detection and cost optimization
 """)
 
@@ -36,7 +37,7 @@ st.markdown("""
 st.sidebar.header("📊 Visualization Mode")
 visualization_mode = st.sidebar.radio(
     "Choose what to visualize",
-    ["Autoscaling Tests", "Model Evaluation", "Anomaly & Cost Analysis"],
+    ["Autoscaling Tests", "Phase B.5 - Predicted Data", "DDoS/Spike Tests", "Model Evaluation", "Anomaly & Cost Analysis"],
 )
 
 results_dir = Path("results")
@@ -496,6 +497,690 @@ if visualization_mode == "Autoscaling Tests":
                 st.warning(f"No advanced metrics found for scenario: {selected_scenario}")
         else:
             st.info("🔹 Run `python run_pipeline.py` to generate advanced metrics.")
+
+# =====================================================================
+# MODE 1.5: PHASE B.5 - PREDICTED DATA
+# =====================================================================
+
+elif visualization_mode == "Phase B.5 - Predicted Data":
+    st.header("📊 Phase B.5: Autoscaling on Predicted Data")
+    st.markdown("""
+    Test autoscaling strategies using pre-calculated **LightGBM predictions** to understand:
+    - How well strategies perform with forecasted load
+    - Impact of forecast quality on autoscaling performance
+    - Offline capacity planning capabilities
+    """)
+    
+    # Check for Phase B.5 results
+    phase_b5_files = list(results_dir.glob("phase_b5_predicted_results_*.csv"))
+    
+    if not phase_b5_files:
+        st.warning("⚠️ No Phase B.5 results found. Run `python forecast/phase_b5_predicted.py` first.")
+        st.stop()
+    
+    # Timeframe selection
+    timeframes = sorted([f.stem.split('_')[-1] for f in phase_b5_files])
+    selected_timeframe = st.sidebar.selectbox("Select Timeframe", timeframes, index=0)
+    
+    # Load data for selected timeframe
+    csv_path = results_dir / f"phase_b5_predicted_results_{selected_timeframe}.csv"
+    metrics_path = results_dir / f"phase_b5_metrics_summary_{selected_timeframe}.json"
+    analysis_path = results_dir / f"phase_b5_analysis_{selected_timeframe}.json"
+    
+    df = pd.read_csv(csv_path)
+    
+    with open(metrics_path, 'r') as f:
+        metrics_summary = json.load(f)
+    
+    with open(analysis_path, 'r') as f:
+        analysis = json.load(f)
+    
+    strategies = sorted(df['strategy'].unique())
+    selected_strategies = st.sidebar.multiselect(
+        "Select Strategies", strategies, default=strategies
+    )
+    
+    filtered_df = df[df['strategy'].isin(selected_strategies)].copy()
+    
+    # Tabs for Phase B.5
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 Overview",
+        "📈 Pod Timeline", 
+        "💰 Cost Analysis",
+        "🎯 Performance Metrics",
+        "📉 Forecast Quality"
+    ])
+    
+    # =====================================================================
+    # TAB 1: Overview
+    # =====================================================================
+    
+    with tab1:
+        st.subheader(f"Phase B.5 Results Overview - {selected_timeframe}")
+        
+        # Top metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            best_strategy = min(metrics_summary.items(), key=lambda x: x[1]['total_cost'])[0]
+            st.metric("Best Strategy (Cost)", best_strategy)
+        
+        with col2:
+            best_sla = min(metrics_summary.items(), key=lambda x: x[1]['sla_violations'])[0]
+            st.metric("Best Strategy (SLA)", best_sla)
+        
+        with col3:
+            total_samples = len(df) // len(strategies)
+            st.metric("Total Samples", total_samples)
+        
+        with col4:
+            timeframe_minutes = int(selected_timeframe[:-1])
+            duration_hours = (total_samples * timeframe_minutes) / 60
+            st.metric("Duration", f"{duration_hours:.1f}h")
+        
+        st.markdown("---")
+        
+        # Strategy Comparison Table
+        st.subheader("Strategy Comparison")
+        
+        comparison_data = []
+        for strategy, metrics in metrics_summary.items():
+            comparison_data.append({
+                'Strategy': strategy,
+                'Total Cost': f"${metrics['total_cost']:.2f}",
+                'Avg Pods': f"{metrics['avg_pods']:.1f}",
+                'SLA Violations': metrics['sla_violations'],
+                'Scaling Events': metrics['scaling_events'],
+                'Objective Value': f"{metrics['objective_value']:.2f}"
+            })
+        
+        comparison_df = pd.DataFrame(comparison_data)
+        st.dataframe(comparison_df, use_container_width=True)
+        
+        # Cost comparison chart
+        fig = go.Figure(data=[
+            go.Bar(
+                x=[d['Strategy'] for d in comparison_data],
+                y=[float(d['Total Cost'].replace('$', '')) for d in comparison_data],
+                text=[d['Total Cost'] for d in comparison_data],
+                textposition='auto',
+                marker_color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'][:len(comparison_data)]
+            )
+        ])
+        fig.update_layout(
+            title=f"Total Cost Comparison - {selected_timeframe}",
+            xaxis_title="Strategy",
+            yaxis_title="Total Cost ($)",
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # =====================================================================
+    # TAB 2: Pod Timeline
+    # =====================================================================
+    
+    with tab2:
+        st.subheader("Pod Count Over Time")
+        
+        fig = go.Figure()
+        colors = {'REACTIVE': '#1f77b4', 'PREDICTIVE': '#ff7f0e',
+                  'CPU_BASED': '#2ca02c', 'HYBRID': '#d62728'}
+        
+        for strategy in selected_strategies:
+            strategy_data = filtered_df[filtered_df['strategy'] == strategy].sort_values('time')
+            fig.add_trace(go.Scatter(
+                x=strategy_data['time'],
+                y=strategy_data['pods_after'],
+                name=strategy,
+                mode='lines',
+                line=dict(color=colors.get(strategy, '#888888'), width=2),
+            ))
+        
+        fig.update_layout(
+            title=f"Pod Allocation Timeline - {selected_timeframe}",
+            xaxis_title="Time (steps)",
+            yaxis_title="Pod Count",
+            hovermode='x unified',
+            height=500,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Scaling actions heatmap
+        st.subheader("Scaling Actions")
+        
+        for strategy in selected_strategies:
+            strategy_data = filtered_df[filtered_df['strategy'] == strategy].sort_values('time')
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                actions = strategy_data['scaling_action'].values
+                fig = go.Figure(data=go.Heatmap(
+                    z=[actions],
+                    x=strategy_data['time'],
+                    colorscale=[[0, 'red'], [0.5, 'white'], [1, 'green']],
+                    zmid=0,
+                    showscale=True,
+                    colorbar=dict(title="Action")
+                ))
+                fig.update_layout(
+                    title=f"{strategy} - Scaling Actions",
+                    xaxis_title="Time",
+                    yaxis_title="",
+                    height=150,
+                    yaxis=dict(showticklabels=False)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                scale_ups = (actions > 0).sum()
+                scale_downs = (actions < 0).sum()
+                no_change = (actions == 0).sum()
+                
+                st.metric("Scale Ups", scale_ups)
+                st.metric("Scale Downs", scale_downs)
+                st.metric("No Change", no_change)
+    
+    # =====================================================================
+    # TAB 3: Cost Analysis
+    # =====================================================================
+    
+    with tab3:
+        st.subheader("Cost Breakdown")
+        
+        # Cost over time
+        fig = go.Figure()
+        
+        for strategy in selected_strategies:
+            strategy_data = filtered_df[filtered_df['strategy'] == strategy].sort_values('time')
+            # Calculate cumulative cost
+            cost_per_step = strategy_data['pods_after'] * 0.05 * (int(selected_timeframe[:-1]) / 60)
+            cumulative_cost = cost_per_step.cumsum()
+            
+            fig.add_trace(go.Scatter(
+                x=strategy_data['time'],
+                y=cumulative_cost,
+                name=strategy,
+                mode='lines',
+                line=dict(color=colors.get(strategy, '#888888'), width=2),
+            ))
+        
+        fig.update_layout(
+            title=f"Cumulative Cost Over Time - {selected_timeframe}",
+            xaxis_title="Time (steps)",
+            yaxis_title="Cumulative Cost ($)",
+            hovermode='x unified',
+            height=500,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Cost efficiency metrics
+        st.subheader("Cost Efficiency Metrics")
+        
+        efficiency_data = []
+        for strategy, metrics in metrics_summary.items():
+            if metrics['avg_pods'] > 0:
+                cost_per_pod = metrics['total_cost'] / metrics['avg_pods']
+                efficiency_data.append({
+                    'Strategy': strategy,
+                    'Cost per Pod': f"${cost_per_pod:.2f}",
+                    'Avg Pods': f"{metrics['avg_pods']:.1f}",
+                    'Cost per Event': f"${metrics['total_cost'] / max(metrics['scaling_events'], 1):.2f}"
+                })
+        
+        st.dataframe(pd.DataFrame(efficiency_data), use_container_width=True)
+    
+    # =====================================================================
+    # TAB 4: Performance Metrics
+    # =====================================================================
+    
+    with tab4:
+        st.subheader("Performance Analysis")
+        
+        # SLA violations comparison
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=list(metrics_summary.keys()),
+                    y=[m['sla_violations'] for m in metrics_summary.values()],
+                    marker_color='red',
+                    text=[m['sla_violations'] for m in metrics_summary.values()],
+                    textposition='auto'
+                )
+            ])
+            fig.update_layout(
+                title="SLA Violations by Strategy",
+                xaxis_title="Strategy",
+                yaxis_title="Violations",
+                height=400
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=list(metrics_summary.keys()),
+                    y=[m['scaling_events'] for m in metrics_summary.values()],
+                    marker_color='blue',
+                    text=[m['scaling_events'] for m in metrics_summary.values()],
+                    textposition='auto'
+                )
+            ])
+            fig.update_layout(
+                title="Scaling Events by Strategy",
+                xaxis_title="Strategy",
+                yaxis_title="Events",
+                height=400
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # CPU utilization
+        st.subheader("CPU Utilization")
+        
+        fig = go.Figure()
+        
+        for strategy in selected_strategies:
+            strategy_data = filtered_df[filtered_df['strategy'] == strategy].sort_values('time')
+            
+            fig.add_trace(go.Scatter(
+                x=strategy_data['time'],
+                y=strategy_data['cpu_utilization'],
+                name=strategy,
+                mode='lines',
+                line=dict(color=colors.get(strategy, '#888888')),
+            ))
+        
+        fig.update_layout(
+            title=f"CPU Utilization Over Time - {selected_timeframe}",
+            xaxis_title="Time (steps)",
+            yaxis_title="CPU Utilization",
+            hovermode='x unified',
+            height=500,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # =====================================================================
+    # TAB 5: Forecast Quality
+    # =====================================================================
+    
+    with tab5:
+        st.subheader("Forecast Quality Analysis")
+        
+        # Show forecast error statistics
+        first_strategy = selected_strategies[0]
+        strategy_data = filtered_df[filtered_df['strategy'] == first_strategy].sort_values('time')
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            mean_error = strategy_data['forecast_error'].mean()
+            st.metric("Mean Forecast Error", f"{mean_error:.2f}")
+        
+        with col2:
+            abs_mean_error = strategy_data['forecast_error'].abs().mean()
+            st.metric("Mean Abs Error", f"{abs_mean_error:.2f}")
+        
+        with col3:
+            rmse = np.sqrt((strategy_data['forecast_error']**2).mean())
+            st.metric("RMSE", f"{rmse:.2f}")
+        
+        with col4:
+            mape = (strategy_data['forecast_error'].abs() / strategy_data['actual_load'].clip(lower=1)).mean() * 100
+            st.metric("MAPE", f"{mape:.1f}%")
+        
+        # Load vs Prediction
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=strategy_data['time'],
+            y=strategy_data['actual_load'],
+            name='Actual Load',
+            mode='lines',
+            line=dict(color='blue', width=2),
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=strategy_data['time'],
+            y=strategy_data['predicted_load'],
+            name='Predicted Load',
+            mode='lines',
+            line=dict(color='orange', width=2, dash='dash'),
+        ))
+        
+        fig.update_layout(
+            title=f"Actual vs Predicted Load - {selected_timeframe}",
+            xaxis_title="Time (steps)",
+            yaxis_title="Request Rate",
+            hovermode='x unified',
+            height=500,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Forecast error distribution
+        st.subheader("Forecast Error Distribution")
+        
+        fig = go.Figure()
+        fig.add_trace(go.Histogram(
+            x=strategy_data['forecast_error'],
+            nbinsx=50,
+            marker_color='steelblue',
+        ))
+        fig.update_layout(
+            title="Distribution of Forecast Errors",
+            xaxis_title="Error",
+            yaxis_title="Frequency",
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+# =====================================================================
+# MODE 1.75: DDoS/SPIKE TESTS
+# =====================================================================
+
+elif visualization_mode == "DDoS/Spike Tests":
+    st.header("🚨 DDoS/Spike Attack Testing")
+    st.markdown("""
+    Compare strategy performance under various attack scenarios:
+    - **NORMAL**: Baseline daily traffic pattern
+    - **SUDDEN_SPIKE**: Instant 5x traffic (DDoS attack)
+    - **GRADUAL_SPIKE**: Slow ramp-up (flash sale)
+    - **OSCILLATING_SPIKE**: Multiple attack waves
+    - **SUSTAINED_DDOS**: Long-duration high traffic
+    """)
+    
+    ddos_dir = results_dir / "ddos_tests"
+    
+    if not ddos_dir.exists():
+        st.warning("⚠️ No DDoS test results found. Run `python scripts/test_ddos_scenarios.py` first.")
+        st.stop()
+    
+    # Load comparison report
+    report_file = ddos_dir / "ddos_comparison_report.json"
+    if not report_file.exists():
+        st.error("Comparison report not found.")
+        st.stop()
+    
+    with open(report_file, 'r') as f:
+        comparison_data = json.load(f)
+    
+    scenarios = list(comparison_data.keys())
+    strategies = ['REACTIVE', 'PREDICTIVE', 'CPU_BASED', 'HYBRID']
+    
+    # Scenario selection
+    selected_scenario = st.sidebar.selectbox("Select Scenario", scenarios, index=1)  # Default to SUDDEN_SPIKE
+    
+    # Load detailed results for selected scenario
+    results_file = ddos_dir / f"{selected_scenario.lower()}_results.csv"
+    df = pd.read_csv(results_file)
+    
+    # Tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 Overview",
+        "📈 Pod Timeline",
+        "🚨 Spike Response",
+        "💰 Cost vs SLA",
+        "📋 Comparison Table"
+    ])
+    
+    # =====================================================================
+    # TAB 1: Overview
+    # =====================================================================
+    
+    with tab1:
+        st.subheader(f"Scenario: {selected_scenario}")
+        
+        # Key metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        metrics = comparison_data[selected_scenario]
+        
+        with col1:
+            best_cost_strategy = min(metrics.items(), key=lambda x: x[1]['total_cost'])[0]
+            st.metric("Best Cost", best_cost_strategy, 
+                     f"${metrics[best_cost_strategy]['total_cost']:.2f}")
+        
+        with col2:
+            best_sla_strategy = min(metrics.items(), key=lambda x: x[1]['sla_violations'])[0]
+            st.metric("Best SLA", best_sla_strategy,
+                     f"{metrics[best_sla_strategy]['sla_violations']} violations")
+        
+        with col3:
+            if 'spike_response_time' in metrics[strategies[0]]:
+                best_response = min(metrics.items(), 
+                                   key=lambda x: x[1].get('spike_response_time', 999))[0]
+                st.metric("Fastest Response", best_response,
+                         f"{metrics[best_response].get('spike_response_time', 0):.1f}min")
+        
+        with col4:
+            total_samples = len(df) // len(strategies)
+            st.metric("Duration", f"{total_samples}min")
+        
+        st.markdown("---")
+        
+        # Metrics comparison
+        st.subheader("Strategy Performance")
+        
+        comparison_table = []
+        for strategy in strategies:
+            if strategy in metrics:
+                comparison_table.append({
+                    'Strategy': strategy,
+                    'Cost': f"${metrics[strategy]['total_cost']:.2f}",
+                    'SLA Violations': metrics[strategy]['sla_violations'],
+                    'Scaling Events': metrics[strategy]['scaling_events'],
+                    'Response Time': f"{metrics[strategy].get('spike_response_time', 0):.1f}min"
+                })
+        
+        st.dataframe(pd.DataFrame(comparison_table), use_container_width=True)
+    
+    # =====================================================================
+    # TAB 2: Pod Timeline
+    # =====================================================================
+    
+    with tab2:
+        st.subheader("Pod Count Over Time")
+        
+        # Load traffic pattern
+        traffic_file = Path("data/synthetic_ddos") / f"{selected_scenario.lower()}_traffic.csv"
+        if traffic_file.exists():
+            traffic_df = pd.read_csv(traffic_file)
+            
+            # Create figure with secondary y-axis
+            fig = go.Figure()
+            
+            # Add traffic pattern (secondary axis)
+            fig.add_trace(go.Scatter(
+                x=traffic_df['timestamp'],
+                y=traffic_df['requests_count'],
+                name='Traffic Load',
+                mode='lines',
+                line=dict(color='lightgray', width=1),
+                yaxis='y2',
+                opacity=0.5
+            ))
+        
+        # Add pod counts
+        colors = {'REACTIVE': '#1f77b4', 'PREDICTIVE': '#ff7f0e',
+                  'CPU_BASED': '#2ca02c', 'HYBRID': '#d62728'}
+        
+        for strategy in strategies:
+            strategy_data = df[df['strategy'] == strategy].sort_values('time')
+            fig.add_trace(go.Scatter(
+                x=strategy_data['time'],
+                y=strategy_data['pods_after'],
+                name=strategy,
+                mode='lines',
+                line=dict(color=colors.get(strategy, '#888888'), width=2),
+            ))
+        
+        fig.update_layout(
+            title=f"Pod Allocation - {selected_scenario}",
+            xaxis_title="Time (minutes)",
+            yaxis_title="Pod Count",
+            yaxis2=dict(
+                title="Traffic (requests/min)",
+                overlaying='y',
+                side='right'
+            ),
+            hovermode='x unified',
+            height=500,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # =====================================================================
+    # TAB 3: Spike Response Analysis
+    # =====================================================================
+    
+    with tab3:
+        st.subheader("Spike Detection and Response")
+        
+        # Load metadata to identify spike periods
+        meta_file = Path("data/synthetic_ddos") / f"{selected_scenario.lower()}_metadata.json"
+        if meta_file.exists():
+            with open(meta_file, 'r') as f:
+                metadata = json.load(f)
+            
+            if 'spikes' in metadata:
+                st.markdown("**Spike Events:**")
+                for spike in metadata['spikes']:
+                    with st.expander(f"Spike {spike.get('spike_number', 1)} - {spike['type']}"):
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Start", f"{spike['start']}min")
+                        with col2:
+                            st.metric("Duration", f"{spike.get('duration', spike['end']-spike['start'])}min")
+                        with col3:
+                            st.metric("Multiplier", f"{spike['multiplier']}x")
+        
+        # Response time comparison
+        st.markdown("**Response Time by Strategy:**")
+        
+        response_data = []
+        for strategy in strategies:
+            if strategy in metrics:
+                response_data.append({
+                    'Strategy': strategy,
+                    'Response Time (min)': metrics[strategy].get('spike_response_time', 0)
+                })
+        
+        fig = go.Figure(data=[
+            go.Bar(
+                x=[d['Strategy'] for d in response_data],
+                y=[d['Response Time (min)'] for d in response_data],
+                marker_color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'][:len(response_data)],
+                text=[f"{d['Response Time (min)']:.1f}min" for d in response_data],
+                textposition='auto'
+            )
+        ])
+        fig.update_layout(
+            title="Average Spike Response Time",
+            xaxis_title="Strategy",
+            yaxis_title="Response Time (minutes)",
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # =====================================================================
+    # TAB 4: Cost vs SLA Trade-off
+    # =====================================================================
+    
+    with tab4:
+        st.subheader("Cost vs SLA Trade-off Analysis")
+        
+        # Scatter plot: Cost vs SLA Violations
+        fig = go.Figure()
+        
+        for strategy in strategies:
+            if strategy in metrics:
+                fig.add_trace(go.Scatter(
+                    x=[metrics[strategy]['sla_violations']],
+                    y=[metrics[strategy]['total_cost']],
+                    mode='markers+text',
+                    name=strategy,
+                    marker=dict(size=15, color=colors.get(strategy, '#888888')),
+                    text=[strategy],
+                    textposition='top center'
+                ))
+        
+        fig.update_layout(
+            title=f"Cost vs SLA Trade-off - {selected_scenario}",
+            xaxis_title="SLA Violations",
+            yaxis_title="Total Cost ($)",
+            height=500,
+            showlegend=True
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("**Interpretation:**")
+        st.markdown("- **Bottom-left corner** = Ideal (low cost, low SLA violations)")
+        st.markdown("- **Top-right corner** = Poor (high cost, high SLA violations)")
+    
+    # =====================================================================
+    # TAB 5: Cross-Scenario Comparison
+    # =====================================================================
+    
+    with tab5:
+        st.subheader("Performance Across All Scenarios")
+        
+        # Cost heatmap
+        cost_matrix = []
+        for strategy in strategies:
+            row = []
+            for scenario in scenarios:
+                if scenario in comparison_data and strategy in comparison_data[scenario]:
+                    row.append(comparison_data[scenario][strategy]['total_cost'])
+                else:
+                    row.append(0)
+            cost_matrix.append(row)
+        
+        fig = go.Figure(data=go.Heatmap(
+            z=cost_matrix,
+            x=scenarios,
+            y=strategies,
+            colorscale='RdYlGn_r',
+            text=[[f"${v:.2f}" for v in row] for row in cost_matrix],
+            texttemplate='%{text}',
+            textfont={"size": 10},
+            colorbar=dict(title="Cost ($)")
+        ))
+        fig.update_layout(
+            title="Cost Comparison Across Scenarios",
+            xaxis_title="Scenario",
+            yaxis_title="Strategy",
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # SLA violations heatmap
+        sla_matrix = []
+        for strategy in strategies:
+            row = []
+            for scenario in scenarios:
+                if scenario in comparison_data and strategy in comparison_data[scenario]:
+                    row.append(comparison_data[scenario][strategy]['sla_violations'])
+                else:
+                    row.append(0)
+            sla_matrix.append(row)
+        
+        fig = go.Figure(data=go.Heatmap(
+            z=sla_matrix,
+            x=scenarios,
+            y=strategies,
+            colorscale='RdYlGn_r',
+            text=[[str(int(v)) for v in row] for row in sla_matrix],
+            texttemplate='%{text}',
+            textfont={"size": 10},
+            colorbar=dict(title="SLA Violations")
+        ))
+        fig.update_layout(
+            title="SLA Violations Across Scenarios",
+            xaxis_title="Scenario",
+            yaxis_title="Strategy",
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 # =====================================================================
 # MODE 2: MODEL EVALUATION

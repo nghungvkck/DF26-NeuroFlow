@@ -4,18 +4,31 @@ HYBRID AUTOSCALING POLICY
 Multi-level decision hierarchy for robustness.
 
 Priority order:
-1. EMERGENCY: If CPU > critical threshold → scale out immediately
-2. PREDICTIVE: Use forecast-based decision if available
-3. REACTIVE: Fallback to real-time request threshold
-4. HOLD: No scaling decision needed
+1. ANOMALY: Detect DDoS/spikes and scale aggressively
+2. EMERGENCY: If CPU > critical threshold → scale out immediately
+3. PREDICTIVE: Use forecast-based decision if available
+4. REACTIVE: Fallback to real-time request threshold
+5. HOLD: No scaling decision needed
 
 This ensures:
+- Proactive spike/DDoS detection and mitigation
 - Emergency protection against sudden spikes
 - Proactive scaling when forecast is reliable
 - Graceful degradation to reactive when forecast fails
 """
 
 import numpy as np
+import sys
+import os
+
+# Add parent directory to path for anomaly detector import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from anomaly.anomaly_detection import AnomalyDetector
+    ANOMALY_DETECTION_AVAILABLE = True
+except ImportError:
+    ANOMALY_DETECTION_AVAILABLE = False
 
 
 class HybridAutoscaler:
@@ -24,17 +37,24 @@ class HybridAutoscaler:
     predictive forecasting, and reactive fallback.
     """
     
+    # Standard safety margin: 20% headroom for all strategies
+    FORECAST_SAFETY_MARGIN = 0.80
+    
     def __init__(
         self,
         capacity_per_server,
         min_servers=2,
         max_servers=20,
+        # Anomaly detection layer
+        enable_anomaly_detection=True,
+        anomaly_rate_threshold=0.5,     # 50% spike = anomaly
+        anomaly_scale_multiplier=1.5,   # Scale by 1.5x on anomaly
         # Emergency layer (CPU-based)
         cpu_critical_th=0.95,           # Immediate scale-out trigger
         cpu_per_request=0.05,
         # Predictive layer
         predictive_weight=0.9,          # Weight between predictive and reactive
-        forecast_safety_margin=0.85,
+        forecast_safety_margin=None,    # Use FORECAST_SAFETY_MARGIN if None
         # Reactive layer
         reactive_scale_out_th=0.7,
         reactive_scale_in_th=0.3,
@@ -48,13 +68,26 @@ class HybridAutoscaler:
         self.min = min_servers
         self.max = max_servers
         
+        # Anomaly detection parameters
+        self.enable_anomaly_detection = enable_anomaly_detection and ANOMALY_DETECTION_AVAILABLE
+        self.anomaly_scale_multiplier = anomaly_scale_multiplier
+        if self.enable_anomaly_detection:
+            self.anomaly_detector = AnomalyDetector(
+                window_size=50,
+                zscore_threshold=2.5,
+                rate_threshold=anomaly_rate_threshold
+            )
+        else:
+            self.anomaly_detector = None
+        
         # Emergency parameters
         self.cpu_critical_th = cpu_critical_th
         self.cpu_per_request = cpu_per_request
         
         # Predictive parameters
         self.predictive_weight = predictive_weight
-        self.forecast_safety_margin = forecast_safety_margin
+        # Use standardized safety margin (20% headroom)
+        self.forecast_safety_margin = forecast_safety_margin or self.FORECAST_SAFETY_MARGIN
         
         # Reactive parameters
         self.reactive_scale_out_th = reactive_scale_out_th
@@ -83,6 +116,9 @@ class HybridAutoscaler:
         """
         Assess forecast reliability based on recent MAPE (Mean Absolute Percentage Error).
         
+        FIXED: Calculate actual percentage errors, not just absolute errors.
+        MAPE = mean(|error_i / actual_i|) for actual_i > 0
+        
         Returns:
             reliability_score: 0-1 (1 = perfect, 0 = unreliable)
         """
@@ -90,10 +126,52 @@ class HybridAutoscaler:
             return 0.5  # Default confidence if insufficient history
         
         errors = np.array(self.recent_errors[-self.forecast_error_window:])
-        mape = np.mean(np.abs(errors))
-        # Convert MAPE to reliability score: 0.2 mape → 0.9 reliability
-        reliability = max(0, min(1, 1 - mape * 2))
+        traffic = np.array(self.recent_traffic[-self.forecast_error_window:])
+        
+        # Ensure arrays are same length
+        min_len = min(len(errors), len(traffic))
+        errors = errors[-min_len:]
+        traffic = traffic[-min_len:]
+        
+        # Calculate percentage errors only where traffic > 0
+        valid_idx = traffic > 0
+        if not np.any(valid_idx):
+            return 0.5
+        
+        # MAPE: Mean Absolute Percentage Error
+        pct_errors = np.abs(errors[valid_idx] / traffic[valid_idx])
+        mape = np.mean(pct_errors)
+        
+        # Convert MAPE to reliability (e.g., 20% error → 80% reliable)
+        # Bounds: [0, 1]
+        reliability = max(0, min(1, 1 - mape))
         return reliability
+    
+    def _anomaly_decision(self, requests, current_servers):
+        """
+        LAYER 0: ANOMALY DETECTION
+        Detect DDoS attacks, flash sales, sudden spikes.
+        
+        Returns:
+            (servers, reason) or (None, None) if no anomaly
+        """
+        if not self.anomaly_detector:
+            return None, None
+        
+        # Check for anomaly
+        is_anomaly, anomaly_reason = self.anomaly_detector.update_online(requests)
+        
+        if is_anomaly:
+            # Aggressive scaling on spike/DDoS
+            # Scale up by multiplier (default 1.5x)
+            target_servers = int(current_servers * self.anomaly_scale_multiplier)
+            target_servers = max(self.min, min(target_servers, self.max))
+            
+            if target_servers > current_servers:
+                reason = f"ANOMALY_SCALE_OUT: {anomaly_reason}"
+                return target_servers, reason
+        
+        return None, None
     
     def _emergency_decision(self, requests, current_servers):
         """
@@ -193,6 +271,17 @@ class HybridAutoscaler:
         self.recent_traffic.append(requests)
         if len(self.recent_traffic) > self.forecast_error_window:
             self.recent_traffic.pop(0)
+        
+        # --- Layer 0: Anomaly Detection (DDoS/Spike) ---
+        if self.enable_anomaly_detection:
+            anomaly_servers, anomaly_reason = self._anomaly_decision(requests, current_servers)
+            if anomaly_servers is not None:
+                new_servers = anomaly_servers
+                action = +1  # Always scale out on anomaly
+                reason = anomaly_reason
+                self.cooldown_timer = self.base_cooldown // 2  # Shorter cooldown for anomalies
+                self.last_decision_reason = reason
+                return new_servers, action, reason
         
         # --- Layer 1: Emergency ---
         emergency_servers, emergency_reason = self._emergency_decision(requests, current_servers)

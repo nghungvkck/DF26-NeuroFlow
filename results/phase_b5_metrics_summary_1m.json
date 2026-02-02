@@ -1,0 +1,30 @@
+{
+  "REACTIVE": {
+    "total_cost": 113.62916666666668,
+    "avg_pods": 0,
+    "sla_violations": 0,
+    "scaling_events": 1877,
+    "objective_value": 93963.62916666667
+  },
+  "PREDICTIVE": {
+    "total_cost": 113.5,
+    "avg_pods": 0,
+    "sla_violations": 0,
+    "scaling_events": 1,
+    "objective_value": 163.5
+  },
+  "CPU_BASED": {
+    "total_cost": 252.15833333333333,
+    "avg_pods": 0,
+    "sla_violations": 0,
+    "scaling_events": 227,
+    "objective_value": 11602.158333333333
+  },
+  "HYBRID": {
+    "total_cost": 147.65,
+    "avg_pods": 0,
+    "sla_violations": 0,
+    "scaling_events": 2270,
+    "objective_value": 113647.65
+  }
+}

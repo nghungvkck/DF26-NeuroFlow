@@ -1,0 +1,11 @@
+{
+  "scenario_type": "NORMAL",
+  "duration_minutes": 720,
+  "base_rate": 100.0,
+  "statistics": {
+    "mean_traffic": 62.44103007439147,
+    "max_traffic": 169.73570119797978,
+    "min_traffic": 0.0,
+    "std_traffic": 52.78860660952206
+  }
+}

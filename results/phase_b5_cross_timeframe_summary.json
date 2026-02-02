@@ -1,0 +1,22 @@
+{
+  "REACTIVE": {
+    "avg_cost": 68.89166666666667,
+    "avg_sla_violations": 7.333333333333333,
+    "avg_scaling_events": 688.3333333333334
+  },
+  "PREDICTIVE": {
+    "avg_cost": 59.99027777777778,
+    "avg_sla_violations": 23.666666666666668,
+    "avg_scaling_events": 39.0
+  },
+  "CPU_BASED": {
+    "avg_cost": 171.13749999999996,
+    "avg_sla_violations": 6.0,
+    "avg_scaling_events": 188.66666666666666
+  },
+  "HYBRID": {
+    "avg_cost": 97.34722222222223,
+    "avg_sla_violations": 6.333333333333333,
+    "avg_scaling_events": 958.6666666666666
+  }
+}
