@@ -1,0 +1,1 @@
+lấy train.txt và test.txt để trong folder raw_date trên link drive
