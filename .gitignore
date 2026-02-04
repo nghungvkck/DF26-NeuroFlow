@@ -1,0 +1,17 @@
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+*.pkl
+*.joblib
+results/*.csv
+results/*.png

@@ -1,0 +1,60 @@
+data:
+  paths:
+    train_raw: "raw_data/train.txt"
+    test_raw: "raw_data/test.txt"
+
+  target: "requests_count"
+  time_column: "timestamp"
+
+feature:
+  - type: temporal
+    params:
+      features:
+        - hour_of_day
+        - day_of_week
+        - hour_sin
+        - hour_cos
+
+  - type: lag
+    params:
+      lags: [5, 15, 30]
+
+  - type: rolling
+    params:
+      window_size: 5
+      metrics: ["mean", "max"]
+
+model:
+  lightgbm:
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 63
+    min_data_in_leaf: 62
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    num_boost_round: 1000
+    early_stopping_rounds: 50
+
+  xgboost:
+    learning_rate: 0.05
+    max_depth: 6
+    subsample: 0.8
+    colsample_bytree: 0.8
+    num_rounds: 1000
+
+  prophet:
+    seasonality_mode: "additive"
+    yearly_seasonality: true
+    weekly_seasonality: true
+    daily_seasonality: true
+
+  hybrid:
+    lstm_hidden: 64
+    lstm_layers: 2
+    epochs: 100
+    batch_size: 32
+
+evaluation:
+  metrics: ["r2", "mae", "rmse", "smape"]
+  test_size: 0.2
